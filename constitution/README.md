@@ -1,19 +1,10 @@
-# 宪法目录使用说明（B 重立）
+# constitution/README
 
-## 文件
-
-| 文件 | 内容 |
-|---|---|
-| `CONSTITUTION.md` | 元规则 C-001/C-003/C-005 |
-| `data.md` | 数据不变量 D-101/D-103/D-107/D-108/D-114 |
-| `CHANGELOG.md` | 宪法自身的修改记录 |
-
-## 什么时候跑哪个检查
+Files: `CONSTITUTION.md` (C-001/C-003/C-005), `data.md` (D-101/D-103/D-107/D-108/D-114), `CHANGELOG.md`.
 
 ```bash
-python tools/check_invariants.py --all   # 不变量扫描（每次写入可跑）
-python tools/ledger.py verify            # 账本链完整（每批收尾必跑）
+python tools/check_invariants.py --all
+python tools/ledger.py verify
 ```
 
-新条目先过四项检验再入宪（无程度词、可举具体违反、二值、可直接判定）；过不了就写成设计说明。
-旧史（C-002/C-004、D-102/104/105/106/109/110/111、I-2xx、术语表）见离线包 `E:\_convtree_archive_20260928\`，B 用到时重立，不提前供着。
+New entries must pass before merge: falsifiable statement, no degree words; concrete violation exhibitable; binary violation; inputs directly readable. Fail ⇒ design note, not invariant.

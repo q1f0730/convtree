@@ -1,14 +1,13 @@
-# 数据不变量（B 重立，2026-09-28）
+# data.md — D-1xx
 
-> `D-1xx` 段。ID 继承旧项目（主键不变）；新条目按 C-004 准入（准入门槛本身未带过来——新项目先跑起来再立法，如需立规矩时再补）。
-> B 的北极星「一个难题沿着分支想透」直接立在这五条上：D-101/D-103 是地基，D-107/D-108 是灵魂，D-114 是保命。
+> IDs inherited, primary keys unchanged.
 
 | ID | 规范 | 判据 | 反例 |
 |---|---|---|---|
-| D-101 | 消息原文逐字符不可变 | 全仓不存在更新 `message.content` 的语句 | `UPDATE message SET content=...` |
-| D-103 | 全系统单一坐标系 | 所有 `start`/`end` 都是源串字符偏移 | 用渲染后坐标/DOM 偏移 |
-| D-107 | 父节点请求永不含子节点内容 | 上下文 = `path(root→self)` 上的消息；兄弟与子节点不在其中 | 把子对话摘要注入父对话 |
-| D-108 | 重新生成 = 新增兄弟版本，不覆盖 | 重生成插入新行并分配 `ordinal`；上下文只取每组最新 | `UPDATE` 已有 assistant 消息 |
-| D-114 | 每日首次启动自动备份；每份备份必须自验通过才算数 | 超 24h 必执行；`integrity_check='ok'` 且行数一致，否则删份报错 | 只拷文件不校验 |
+| D-101 | `message.content` 逐字符不可变 | 全仓无更新该列语句 | `UPDATE message SET content=...` |
+| D-103 | 单一坐标系 | `start`/`end` = 源串字符偏移 | 渲染后坐标/DOM 偏移 |
+| D-107 | 父请求永不含子内容 | 上下文 = `path(root→self)` 消息；兄弟/子 excluded | 子摘要注入父对话 |
+| D-108 | 重生成 = 新兄弟版本 | 新行 + `ordinal`；上下文每组取最新 | `UPDATE` 已有 assistant 行 |
+| D-114 | 每日首次启动自动备份；自验通过才算数 | 超 24h 必执行；`integrity_check='ok'` 且行数一致，否则删份报错 | 只拷不验 |
 
-检查：`tools/check_invariants.py --all`（当前仅 D-101 有机械规则，其余靠验收脚本配对检查——B 的验收脚本待建）。
+机械检查：`tools/check_invariants.py --all`（现仅 D-101；新条目落地时同改追加规则 + 阳性样本）。
