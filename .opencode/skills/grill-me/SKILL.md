@@ -1,6 +1,7 @@
 ---
 name: grill-me
 description: 逐分支质询用户做决策（grill-me）。当用户说 grill me / 让我选 / 帮我拍板，或面临多分支决策时加载。用中文质询，一次只过一个分支。
+slash: true
 ---
 
 # grill-me：逐分支质询
