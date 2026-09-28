@@ -247,6 +247,9 @@ for d in ("server", "tools"):
 check(okc, "全py可编译")
 check('charset="utf-8"' in INK or "charset=utf-8" in INK, "utf8声明")
 check("sClose" in INK, "抽屉有关闭")
+check('id="roots"' in INK and "主对话" in INK, "主对话列表")
+check("location.reload" not in INK, "删空不刷新")
+check("refreshRoots" in INK, "根列表刷新")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))

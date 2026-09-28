@@ -72,6 +72,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 </div>
 <div id="main">
 <div id="tabs"></div>
+<div id="roots" style="display:flex;gap:6px;padding:6px 12px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;font-size:12px;align-items:center"></div>
 <div id="views">
 <div id="tree"><div class="hd">树（点击跳转）</div><div id="treeList"></div></div>
 <div id="chat">
@@ -103,7 +104,6 @@ const notes=[];
 const FAKE='选咖啡豆看三样：产地、烘焙、新鲜度。新手闭眼入这三款：A咖啡豆（埃塞耶加雪菲，花香果酸，适合手冲）；B咖啡豆（巴西喜拉多，坚果巧克力，适合意式）；C咖啡豆（云南普洱，均衡便宜，口粮之王）。先买小包装试，再定口粮。';
 function toast(s){const t=document.getElementById('toast');t.textContent=s;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',1600)}
 function nextColor(){while(used.has(POOL[poolIdx%POOL.length]))poolIdx++;const c=POOL[poolIdx%POOL.length];poolIdx++;used.add(c);return c}
-function mkTab(name){const t={id:++tabSeq,name,parent:cur?cur.tab:null,color:null,msgs:[],rootQ:''};tabs.push(t);return t}
 function renderTabs(){const bar=document.getElementById('tabs');bar.innerHTML='';
  tabs.forEach(t=>{const d=document.createElement('div');d.className='tab'+(t===cur?' on':'');
   const nm=document.createElement('span');nm.textContent=t.name;d.appendChild(nm);
@@ -113,7 +113,11 @@ function renderTabs(){const bar=document.getElementById('tabs');bar.innerHTML=''
   d.oncontextmenu=(e)=>{e.preventDefault();startRename(d,t)};
   d.onauxclick=(e)=>{if(e.button===1){closeTab(t)}};bar.appendChild(d)})}
 function closeTab(t){const i=tabs.indexOf(t);if(i<0)return;tabs.splice(i,1);
- if(!tabs.length){location.reload();return}cur=tabs[Math.max(0,i-1)];renderTabs();renderMsgs();renderTree()}
+ if(!tabs.length){cur=null;renderTabs();renderMsgs();renderTree();return}
+ cur=tabs[Math.max(0,i-1)];renderTabs();switchTabMsgs(cur);renderTree()}
+function switchTabMsgs(t){if(t.msgs===null){fetch('/api/nodes/'+t.nodeId+'/messages').then(r=>r.json()).then(d=>{
+   t.msgs=(d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content}));renderMsgs()}).catch(()=>{t.msgs=[];renderMsgs()});return}
+ renderMsgs()}
 function renderTree(){const L=document.getElementById('treeList');L.innerHTML='';
  tabs.forEach(t=>{const d=document.createElement('div');d.className='tnode'+(t===cur?' on':'');
   d.innerHTML=`<span class="dot" style="background:${t.color||'#888'}"></span><span></span>`;
@@ -130,19 +134,31 @@ async function renameTab(t,name){if(!t.nodeId){t.name=name;renderTabs();renderTr
  try{const r=await fetch('/api/nodes/'+t.nodeId+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name})});
   if(!r.ok)throw new Error((await r.text()).slice(0,120));t.name=name;renderTabs();renderTree()}
  catch(e){toast('改名失败：'+e.message)}}
-function switchTab(t){cur=t;renderTabs();renderTree();
- if(t.msgs===null){fetch('/api/nodes/'+t.nodeId+'/messages').then(r=>r.json()).then(d=>{
-   t.msgs=(d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content}));renderMsgs()}).catch(()=>{t.msgs=[];renderMsgs()});return}
- renderMsgs()}
+function switchTab(t){cur=t;renderTabs();renderTree();refreshRoots();switchTabMsgs(t)}
+function refreshRoots(){fetch('/api/nodes').then(r=>r.json()).then(d=>renderRoots(d.nodes||[])).catch(()=>{})}
+function renderRoots(all){const R=document.getElementById('roots');R.innerHTML='';
+ const lb=document.createElement('span');lb.style.color='var(--mut)';lb.textContent='主对话';R.appendChild(lb);
+ (all||[]).filter(n=>!n.parent_id).forEach(n=>{
+  const open=tabs.find(t=>t.nodeId===n.id);
+  const d=document.createElement('span');d.textContent=n.title;
+  d.style.cssText='padding:3px 12px;border:1px solid var(--line);border-radius:12px;cursor:pointer;white-space:nowrap;'+(open&&open===cur?';background:var(--ink);color:#f6f2e9':'');
+  d.title=n.title;d.onclick=()=>{
+   if(open){switchTab(open);return}
+   const t={id:++tabSeq,nodeId:n.id,name:n.title,parent:null,color:n.color,msgs:null};
+   if(n.parent_id){/* 根无父 */}
+   tabs.push(t);switchTab(t)};
+  R.appendChild(d)})}
 function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  const bb=document.getElementById('backbar');
+ const started=cur&&cur.msgs&&cur.msgs.length>0;
+ document.getElementById('empty').style.display=started?'none':'flex';
+ document.getElementById('composer').style.display=started?'flex':'none';
+ if(!cur){bb.style.display='none';return}
+ if(!cur.msgs){bb.style.display='none';M.innerHTML='<div class="msg-a">…</div>';switchTabMsgs(cur);return}
  if(cur.parent){bb.style.display='block';document.getElementById('crumb').textContent='上级：'+(cur.parent.tab?cur.parent.tab.name:'')}
  else bb.style.display='none';
  cur.msgs.forEach(m=>M.appendChild(bubble(m)));
- M.scrollTop=M.scrollHeight;
- const started=cur.msgs.length>0;
- document.getElementById('empty').style.display=started?'none':'flex';
- document.getElementById('composer').style.display=started?'flex':'none'}
+ M.scrollTop=M.scrollHeight}
 function bubble(m){const d=document.createElement('div');d.className=m.role==='u'?'msg-u':'msg-a';
  if(m.html)d.innerHTML=m.html;else if(m.role==='a')d.innerHTML=md(m.text);else d.textContent=m.text;return d}
 function md(s){s=String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -184,7 +200,7 @@ async function send(text){text=(text||'').trim();if(!text)return;
  if(doneId)cur.nodeId=doneId;
  cur.msgs.push({role:'a',text:full});
  if(first){cur.name=text.length>12?text.slice(0,12)+'…':text;renderTabs()}
- renderTree()}
+ renderTree();refreshRoots()}
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
  if(!box.contains(r.commonAncestorContainer))return null;return{range:r,text:s.toString()}}
@@ -215,7 +231,7 @@ async function textAct(act,info){
   try{wrapRange(info.range,'mark',{color:c})}catch(_){}
   cur.msgs=readBack();
   const nt={id:++tabSeq,nodeId:node.id,name:'未命名',parent:{tab:cur},color:c,msgs:[]};
-  tabs.push(nt);switchTab(nt);toast('已分支出去')}}
+  tabs.push(nt);switchTab(nt);refreshRoots();toast('已分支出去')}}
 function wrapRange(range,tag,opt){const el=document.createElement(tag==='mark'?'mark':'u');
  if(tag==='mark'){el.className='hl';el.style.setProperty('--mk',opt.color+'55')}
  else{el.className='uln';el.style.textDecorationColor=opt.color}
@@ -274,5 +290,5 @@ document.getElementById('sTest').onclick=async()=>{
   (n.nodes||[]).forEach(x=>{byId[x.id]={id:++tabSeq,nodeId:x.id,name:x.title,parent:null,color:x.color,msgs:null}});
   (n.nodes||[]).forEach(x=>{if(x.parent_id&&byId[x.parent_id])byId[x.id].parent={tab:byId[x.parent_id]}});
   Object.values(byId).forEach(t=>tabs.push(t));
-  if(tabs.length){cur=tabs[0];renderTabs();renderTree();switchTab(cur)}}catch(_){}})();
+  if(tabs.length){cur=tabs[0];renderTabs();renderTree();switchTab(cur)}refreshRoots()}catch(_){}})();
 </script></body></html>
