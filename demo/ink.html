@@ -59,6 +59,10 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #drawer .row button{flex:1;padding:9px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:inherit}
 #drawer .row button.pri{background:var(--ink);color:#f6f2e9;border:0}
 #drawMsg{font-size:12px;color:var(--mut);margin-top:10px;min-height:18px}
+.tab{position:relative;padding-right:26px}
+.tab .x{display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);color:var(--mut);border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:13px}
+.tab:hover .x{display:block}
+.tab .x:hover{background:#e0d6c0;color:var(--ink)}
 </style></head><body>
 <div id="side">
 <button data-m="chat" class="on" title="聊天">💬</button>
@@ -101,9 +105,12 @@ function toast(s){const t=document.getElementById('toast');t.textContent=s;t.sty
 function nextColor(){while(used.has(POOL[poolIdx%POOL.length]))poolIdx++;const c=POOL[poolIdx%POOL.length];poolIdx++;used.add(c);return c}
 function mkTab(name){const t={id:++tabSeq,name,parent:cur?cur.tab:null,color:null,msgs:[],rootQ:''};tabs.push(t);return t}
 function renderTabs(){const bar=document.getElementById('tabs');bar.innerHTML='';
- tabs.forEach(t=>{const d=document.createElement('div');d.className='tab'+(t===cur?' on':'');d.textContent=t.name;
+ tabs.forEach(t=>{const d=document.createElement('div');d.className='tab'+(t===cur?' on':'');
+  const nm=document.createElement('span');nm.textContent=t.name;d.appendChild(nm);
+  const x=document.createElement('span');x.className='x';x.textContent='×';x.title='关闭';
+  x.onclick=(e)=>{e.stopPropagation();closeTab(t)};d.appendChild(x);
   d.title=t.name;d.onclick=()=>{switchTab(t)};
-  d.oncontextmenu=(e)=>{e.preventDefault();const n=prompt('重命名',t.name);if(n&&n.trim())renameTab(t,n.trim())};
+  d.oncontextmenu=(e)=>{e.preventDefault();startRename(d,t)};
   d.onauxclick=(e)=>{if(e.button===1){closeTab(t)}};bar.appendChild(d)})}
 function closeTab(t){const i=tabs.indexOf(t);if(i<0)return;tabs.splice(i,1);
  if(!tabs.length){location.reload();return}cur=tabs[Math.max(0,i-1)];renderTabs();renderMsgs();renderTree()}
@@ -111,6 +118,14 @@ function renderTree(){const L=document.getElementById('treeList');L.innerHTML=''
  tabs.forEach(t=>{const d=document.createElement('div');d.className='tnode'+(t===cur?' on':'');
   d.innerHTML=`<span class="dot" style="background:${t.color||'#888'}"></span><span></span>`;
   d.lastChild.textContent=t.name;d.onclick=()=>switchTab(t);L.appendChild(d)})}
+function startRename(d,t){if(d.querySelector('input'))return;
+ const inp=document.createElement('input');inp.value=t.name;
+ inp.style.cssText='width:110px;font:inherit;background:#fff;border:1px solid var(--acc);border-radius:4px;padding:1px 4px';
+ d.innerHTML='';d.appendChild(inp);inp.focus();inp.select();
+ let done=false;const commit=(ok)=>{if(done)return;done=true;
+  if(ok&&inp.value.trim())renameTab(t,inp.value.trim());else{renderTabs();renderTree()}};
+ inp.onkeydown=(e)=>{if(e.key==='Enter')commit(true);else if(e.key==='Escape')commit(false);e.stopPropagation()};
+ inp.onblur=()=>commit(true);inp.onclick=(e)=>e.stopPropagation()}
 async function renameTab(t,name){if(!t.nodeId){t.name=name;renderTabs();renderTree();return}
  try{const r=await fetch('/api/nodes/'+t.nodeId+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name})});
   if(!r.ok)throw new Error((await r.text()).slice(0,120));t.name=name;renderTabs();renderTree()}
@@ -121,7 +136,7 @@ function switchTab(t){cur=t;renderTabs();renderTree();
  renderMsgs()}
 function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  const bb=document.getElementById('backbar');
- if(cur.parent){bb.style.display='block';document.getElementById('crumb').textContent='上级：'+cur.parent.name}
+ if(cur.parent){bb.style.display='block';document.getElementById('crumb').textContent='上级：'+(cur.parent.tab?cur.parent.tab.name:'')}
  else bb.style.display='none';
  cur.msgs.forEach(m=>M.appendChild(bubble(m)));
  M.scrollTop=M.scrollHeight;
