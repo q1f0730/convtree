@@ -175,9 +175,10 @@ async def chat(body: ChatIn):
             if not (text_out or "").strip():
                 text_out = "（生成失败：模型返回了空内容）"
             mid = store.add_message(node_id, "assistant", text_out)
-            step = 24
+            step = 3
             for i in range(0, len(text_out), step):
                 await q.put(("delta", text_out[i:i + step]))
+                await asyncio.sleep(0.02)
             await q.put(("done", {"nodeId": node_id, "messageId": mid["id"]}))
         except Exception as exc:
             mid = store.add_message(node_id, "assistant", "（生成失败：%s）" % exc)

@@ -129,7 +129,21 @@ function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  document.getElementById('empty').style.display=started?'none':'flex';
  document.getElementById('composer').style.display=started?'flex':'none'}
 function bubble(m){const d=document.createElement('div');d.className=m.role==='u'?'msg-u':'msg-a';
- if(m.html)d.innerHTML=m.html;else d.textContent=m.text;return d}
+ if(m.html)d.innerHTML=m.html;else if(m.role==='a')d.innerHTML=md(m.text);else d.textContent=m.text;return d}
+function md(s){s=String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+ const code=[];s=s.replace(/```(\w*)\n([\s\S]*?)(```|$)/g,(m,l,c)=>{code.push('<pre style="background:#f0ebe0;border-radius:8px;padding:10px 12px;overflow-x:auto;font-size:13px">'+c.replace(/\n$/,'')+'</pre>');return '\u0000'+(code.length-1)+'\u0000'});
+ const rows=s.split('\n');let h='',list=null;
+ const flush=()=>{if(list){h+='<ul style="margin:6px 0;padding-left:22px">'+list+'</ul>';list=null}};
+ rows.forEach(r=>{let t=r.replace(/\s+$/,'');
+  const hm=t.match(/^(#{1,4})\s+(.*)$/);
+  if(hm){flush();h+='<div style="font-weight:700;margin:10px 0 4px;font-size:'+(17-(hm[1].length))+ 'px">'+inline(hm[2])+'</div>';return}
+  const lm=t.match(/^(\s*[-*]|\s*\d+[.)])\s+(.*)$/);
+  if(lm){list=(list||'')+'<li>'+inline(lm[2])+'</li>';return}
+  flush();if(t==='')return;h+='<div style="margin:4px 0">'+inline(t)+'</div>'});
+ flush();
+ h=h.replace(/\u0000(\d+)\u0000/g,(m,i)=>code[+i]);
+ return h}
+function inline(s){return s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code style="background:#f0ebe0;border-radius:4px;padding:0 4px">$1</code>')}
 function streamInto(el,full,done){let i=0;el.textContent='';
  (function tick(){i+=2;el.textContent=full.slice(0,i);
   el.parentNode.scrollTop=el.parentNode.scrollHeight;
@@ -150,7 +164,7 @@ async function send(text){text=(text||'').trim();if(!text)return;
   const parts=buf.split('\n\n');buf=parts.pop();
   for(const p of parts){const m=p.match(/^event: (\w+)\ndata: ([\s\S]*)$/);if(!m)continue;
    let d;try{d=JSON.parse(m[2])}catch(_){continue}
-   if(m[1]==='delta'){full+=d.text;ab.textContent=full;M.scrollTop=M.scrollHeight}
+   if(m[1]==='delta'){full+=d.text;ab.innerHTML=md(full);M.scrollTop=M.scrollHeight}
    else if(m[1]==='done'){doneId=d.nodeId}}}
  if(doneId)cur.nodeId=doneId;
  cur.msgs.push({role:'a',text:full});
