@@ -1,0 +1,8 @@
+# 行尾统一为 LF。
+#
+# 项目既有文件（constitution/、MIGRATION.md、RSI.md、tools/、server/ …）一律是 LF，
+# 而 git 在 Windows 上默认 core.autocrlf=true，会把**检出**的内容转成 CRLF。后果有两个：
+#   ① 每次 diff 全量飘红，可审计性被削弱 —— 2026-09-24 P-005 的独立复核就抓到过一次同样的问题；
+#   ② 破坏项目对行尾的既有约定，且这种改动是「悄悄发生」的。
+# 故此处显式声明 eol=lf，并配 `git config core.autocrlf false`（项目级）。
+* text=auto eol=lf

@@ -1,0 +1,19 @@
+# 虚拟环境与缓存
+.venv/
+__pycache__/
+*.pyc
+
+# 本地数据（对话库、测试库）
+data/
+
+# 备份目录：含数据库副本与账本副本。不进仓库，理由同「不随迁移包走」
+# （见 MIGRATION.md）——它会随每次备份增长，且不该有第二份副本四处漂。
+backups/
+
+# 验收脚本的可再生产物（每次跑都会重建；打包/提交前一律排除）
+demo/_render_out.txt
+tools/_judge_request.json
+tools/_decision_request.json
+
+# 环境变量文件：真正的密钥应存到用户配置目录，而不是这里
+.env
