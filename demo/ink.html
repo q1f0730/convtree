@@ -50,11 +50,21 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 .ncard .meta{color:var(--mut);font-size:12px;margin-top:10px;letter-spacing:1px}
 .ncard .meta a{color:var(--acc);cursor:pointer;text-decoration:none}
 #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--ink);color:#f6f2e9;padding:9px 20px;border-radius:20px;font-size:13px;display:none;letter-spacing:1px}
+#drawer{display:none;position:fixed;top:0;right:0;width:320px;height:100vh;background:var(--card);border-left:1px solid var(--line);padding:24px;z-index:60;box-shadow:-12px 0 32px rgba(60,50,30,.1)}
+#drawer.open{display:block}
+#drawer h3{margin:0 0 4px;letter-spacing:3px}
+#drawer label{display:block;margin:14px 0 5px;font-size:12px;color:var(--mut);letter-spacing:2px}
+#drawer input,#drawer select{width:100%;padding:9px 10px;font-size:14px;border:1px solid var(--line);border-radius:8px;background:#fff;font-family:inherit}
+#drawer .row{display:flex;gap:8px;margin-top:18px}
+#drawer .row button{flex:1;padding:9px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:inherit}
+#drawer .row button.pri{background:var(--ink);color:#f6f2e9;border:0}
+#drawMsg{font-size:12px;color:var(--mut);margin-top:10px;min-height:18px}
 </style></head><body>
 <div id="side">
 <button data-m="chat" class="on" title="聊天">💬</button>
 <button data-m="note" title="笔记">📝</button>
 <button data-m="tree" title="树">🌳</button>
+<button id="setBtn" title="设置">⚙</button>
 </div>
 <div id="main">
 <div id="tabs"></div>
@@ -68,6 +78,15 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 </div>
 <div id="notes"></div>
 </div></div>
+<div id="drawer">
+<h3>设置</h3><div style="font-size:12px;color:var(--mut)">模型接入 · 密钥只存本机</div>
+<label>服务商</label><select id="sProv"></select>
+<label>地址 BASE URL</label><input id="sBase" placeholder="https://…">
+<label>模型</label><input id="sModel" placeholder="qwen-plus">
+<label>密钥 API KEY（留空=不改）</label><input id="sKey" type="password" placeholder="sk-…">
+<div class="row"><button id="sSave" class="pri">保存</button><button id="sTest">测试连接</button><button id="sClose">关闭</button></div>
+<div id="drawMsg"></div>
+</div>
 <div id="menu"><button data-a="copy">复制</button><button data-a="ul">划线</button><button data-a="note">记笔记</button><button data-a="branch">分支</button></div>
 <div id="pal"></div>
 <div id="toast"></div>
@@ -84,7 +103,7 @@ function mkTab(name){const t={id:++tabSeq,name,parent:cur?cur.tab:null,color:nul
 function renderTabs(){const bar=document.getElementById('tabs');bar.innerHTML='';
  tabs.forEach(t=>{const d=document.createElement('div');d.className='tab'+(t===cur?' on':'');d.textContent=t.name;
   d.title=t.name;d.onclick=()=>{switchTab(t)};
-  d.oncontextmenu=(e)=>{e.preventDefault();const n=prompt('重命名',t.name);if(n&&n.trim()){t.name=n.trim();renderTabs();renderTree()}};
+  d.oncontextmenu=(e)=>{e.preventDefault();const n=prompt('重命名',t.name);if(n&&n.trim())renameTab(t,n.trim())};
   d.onauxclick=(e)=>{if(e.button===1){closeTab(t)}};bar.appendChild(d)})}
 function closeTab(t){const i=tabs.indexOf(t);if(i<0)return;tabs.splice(i,1);
  if(!tabs.length){location.reload();return}cur=tabs[Math.max(0,i-1)];renderTabs();renderMsgs();renderTree()}
@@ -92,7 +111,14 @@ function renderTree(){const L=document.getElementById('treeList');L.innerHTML=''
  tabs.forEach(t=>{const d=document.createElement('div');d.className='tnode'+(t===cur?' on':'');
   d.innerHTML=`<span class="dot" style="background:${t.color||'#888'}"></span><span></span>`;
   d.lastChild.textContent=t.name;d.onclick=()=>switchTab(t);L.appendChild(d)})}
-function switchTab(t){cur=t;renderTabs();renderMsgs();renderTree()}
+async function renameTab(t,name){if(!t.nodeId){t.name=name;renderTabs();renderTree();return}
+ try{const r=await fetch('/api/nodes/'+t.nodeId+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name})});
+  if(!r.ok)throw new Error((await r.text()).slice(0,120));t.name=name;renderTabs();renderTree()}
+ catch(e){toast('改名失败：'+e.message)}}
+function switchTab(t){cur=t;renderTabs();renderTree();
+ if(t.msgs===null){fetch('/api/nodes/'+t.nodeId+'/messages').then(r=>r.json()).then(d=>{
+   t.msgs=(d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content}));renderMsgs()}).catch(()=>{t.msgs=[];renderMsgs()});return}
+ renderMsgs()}
 function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  const bb=document.getElementById('backbar');
  if(cur.parent){bb.style.display='block';document.getElementById('crumb').textContent='上级：'+cur.parent.name}
@@ -108,16 +134,28 @@ function streamInto(el,full,done){let i=0;el.textContent='';
  (function tick(){i+=2;el.textContent=full.slice(0,i);
   el.parentNode.scrollTop=el.parentNode.scrollHeight;
   if(i<full.length)setTimeout(tick,12);else done&&done()})()}
-function send(text){text=text.trim();if(!text)return;
- if(!cur){cur=mkTab('未命名');renderTabs()}
+async function send(text){text=(text||'').trim();if(!text)return;
+ if(!cur){cur={id:++tabSeq,nodeId:null,name:'未命名',parent:null,color:null,msgs:[]};tabs.push(cur);renderTabs()}
  const first=cur.msgs.length===0;
- if(first)cur.rootQ=text;
  cur.msgs.push({role:'u',text});renderMsgs();
  const M=document.getElementById('msgs');
- const ab=document.createElement('div');ab.className='msg-a';M.appendChild(ab);
+ const ab=document.createElement('div');ab.className='msg-a';ab.textContent='…';M.appendChild(ab);
  M.scrollTop=M.scrollHeight;
- streamInto(ab,FAKE,()=>{cur.msgs.push({role:'a',text:FAKE});renderTree();
-  if(first){cur.name=text.length>10?text.slice(0,10)+'…':text;renderTabs();renderTree()}})}
+ let resp;
+ try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:cur.nodeId})})}
+ catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';return}
+ if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);return}
+ const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null;
+ for(;;){const r=await rd.read();if(r.done)break;buf+=dec.decode(r.value,{stream:true});
+  const parts=buf.split('\n\n');buf=parts.pop();
+  for(const p of parts){const m=p.match(/^event: (\w+)\ndata: ([\s\S]*)$/);if(!m)continue;
+   let d;try{d=JSON.parse(m[2])}catch(_){continue}
+   if(m[1]==='delta'){full+=d.text;ab.textContent=full;M.scrollTop=M.scrollHeight}
+   else if(m[1]==='done'){doneId=d.nodeId}}}
+ if(doneId)cur.nodeId=doneId;
+ cur.msgs.push({role:'a',text:full});
+ if(first){cur.name=text.length>12?text.slice(0,12)+'…':text;renderTabs()}
+ renderTree()}
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
  if(!box.contains(r.commonAncestorContainer))return null;return{range:r,text:s.toString()}}
@@ -133,14 +171,22 @@ document.getElementById('menu').addEventListener('click',e=>{
  const info=document.getElementById('menu')._info;
  document.getElementById('menu').style.display='none';if(!info)return;
  const act=b.dataset.a;textAct(act,info);getSelection().removeAllRanges()});
-function textAct(act,info){
+async function textAct(act,info){
  const txt=info.text;
  if(act==='copy'){navigator.clipboard&&navigator.clipboard.writeText(txt);toast('已复制')}
  else if(act==='ul'){wrapRange(info.range,'u',{color:ULC[0],ul:true});cur.msgs=readBack();toast('已划线（原型：默认黄）')}
  else if(act==='note'){addNote(txt);toast('已记入笔记本')}
- else if(act==='branch'){const c=nextColor();wrapRange(info.range,'mark',{color:c});
+ else if(act==='branch'){
+  if(!cur||!cur.nodeId){toast('等第一轮落库后再分');return}
+  const c=nextColor();let node;
+  try{const r=await fetch('/api/branch',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({parentId:cur.nodeId,anchorText:txt.slice(0,200),color:c})});
+   if(!r.ok)throw new Error((await r.text()).slice(0,120));node=(await r.json()).node}
+  catch(e){toast('分支失败：'+e.message);return}
+  try{wrapRange(info.range,'mark',{color:c})}catch(_){}
   cur.msgs=readBack();
-  const nt=mkTab('未命名');nt.parent={tab:cur};nt.color=c;switchTab(nt);toast('已分支出去（'+c+'）')}}
+  const nt={id:++tabSeq,nodeId:node.id,name:'未命名',parent:{tab:cur},color:c,msgs:[]};
+  tabs.push(nt);switchTab(nt);toast('已分支出去')}}
 function wrapRange(range,tag,opt){const el=document.createElement(tag==='mark'?'mark':'u');
  if(tag==='mark'){el.className='hl';el.style.setProperty('--mk',opt.color+'55')}
  else{el.className='uln';el.style.textDecorationColor=opt.color}
@@ -175,4 +221,29 @@ document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElemen
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};
 document.getElementById('q2').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send2').click()};
 document.getElementById('backBtn').onclick=()=>{if(cur&&cur.parent)switchTab(cur.parent.tab)};
+document.getElementById('setBtn').onclick=()=>document.getElementById('drawer').classList.add('open');
+document.getElementById('sClose').onclick=()=>document.getElementById('drawer').classList.remove('open');
+document.getElementById('sSave').onclick=async()=>{
+ const b={provider:document.getElementById('sProv').value,baseUrl:document.getElementById('sBase').value,
+  model:document.getElementById('sModel').value,apiKey:document.getElementById('sKey').value};
+ try{const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+  const d=await r.json();document.getElementById('drawMsg').textContent=r.ok?'已保存（'+(d.config.key_masked||'无密钥')+'）':'保存失败';
+  document.getElementById('sKey').value=''}catch(e){document.getElementById('drawMsg').textContent='保存失败：'+e.message}};
+document.getElementById('sTest').onclick=async()=>{
+ document.getElementById('drawMsg').textContent='测试中…';
+ try{const r=await fetch('/api/settings/test',{method:'POST'});const d=await r.json();
+  document.getElementById('drawMsg').textContent=(d.ok?'✓ ':'✗ ')+d.message}catch(e){document.getElementById('drawMsg').textContent='失败：'+e.message}};
+(async function boot(){
+ try{const s=await (await fetch('/api/settings')).json();
+  const sel=document.getElementById('sProv');sel.innerHTML='';
+  Object.entries(s.providers||{}).forEach(([id,p])=>{const o=document.createElement('option');o.value=id;o.textContent=p.name;sel.appendChild(o)});
+  sel.value=s.config.provider||'dashscope';
+  document.getElementById('sBase').value=s.config.base_url||'';
+  document.getElementById('sModel').value=s.config.model||'';
+  if(!s.config.configured)toast('未配模型：点⚙设置（不配也能聊，走mock）')}catch(_){toast('连不上后端，确认服务已启动')}
+ try{const n=await (await fetch('/api/nodes')).json();const byId={};
+  (n.nodes||[]).forEach(x=>{byId[x.id]={id:++tabSeq,nodeId:x.id,name:x.title,parent:null,color:x.color,msgs:null}});
+  (n.nodes||[]).forEach(x=>{if(x.parent_id&&byId[x.parent_id])byId[x.id].parent={tab:byId[x.parent_id]}});
+  Object.values(byId).forEach(t=>tabs.push(t));
+  if(tabs.length){cur=tabs[0];renderTabs();renderTree();switchTab(cur)}}catch(_){}})();
 </script></body></html>
