@@ -609,7 +609,7 @@ function wireGraphPan(){const svg=document.getElementById('treeGraph');const sc=
  svg.ondblclick=(e)=>{if(e.target.closest&&e.target.closest('.tn'))return;treeZoom=null;renderTree()}}
 wireGraphPan();
 function wireTreeResize(){const h=document.getElementById('treeResize');if(!h||h._wired)return;h._wired=true;
- h.onpointerdown=(e)=>{e.stopPropagation();e.preventDefault();h._st={x:e.clientX,w:treeW()};document.getElementById('tree').style.transition='none';try{h.setPointerCapture(e.pointerId)}catch(_){}};
+ h.onpointerdown=(e)=>{e.stopPropagation();e.preventDefault();treeZoom=null; /* 拖栏必回自适应 */h._st={x:e.clientX,w:treeW()};document.getElementById('tree').style.transition='none';try{h.setPointerCapture(e.pointerId)}catch(_){}};
  h.onpointermove=(e)=>{const st=h._st;if(!st)return;treeWUser=Math.min(innerWidth-120,Math.max(180,st.w-(e.clientX-st.x)));syncTreeWidth()};
  const end=()=>{h._st=null;document.getElementById('tree').style.transition=''};h.onpointerup=end;h.onpointercancel=end;
  h.ondblclick=()=>{treeWUser=null;syncTreeWidth()}}
