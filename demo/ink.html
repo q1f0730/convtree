@@ -63,6 +63,14 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 .tab .x{display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);color:var(--mut);border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:13px}
 .tab:hover .x{display:block}
 .tab .x:hover{background:#e0d6c0;color:var(--ink)}
+#clist{width:230px;flex:none;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:4px;overflow-y:auto}
+#newChat{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:9px;cursor:pointer;font-family:inherit;font-size:14px;color:var(--ink)}
+#newChat:hover{border-color:var(--acc);color:var(--acc)}
+#roots{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.ritem{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ritem:hover{background:#efe8d6}
+.ritem.on{background:var(--ink);color:#f6f2e9}
+.ritem small{display:block;font-size:11px;opacity:.6;margin-top:2px}
 </style></head><body>
 <div id="side">
 <button data-m="chat" class="on" title="聊天">💬</button>
@@ -70,9 +78,12 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <button data-m="tree" title="树">🌳</button>
 <button id="setBtn" title="设置">⚙</button>
 </div>
+<div id="clist">
+<button id="newChat">＋ 新对话</button>
+<div id="roots"></div>
+</div>
 <div id="main">
 <div id="tabs"></div>
-<div id="roots" style="display:flex;gap:6px;padding:6px 12px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;font-size:12px;align-items:center"></div>
 <div id="views">
 <div id="tree"><div class="hd">树（点击跳转）</div><div id="treeList"></div></div>
 <div id="chat">
@@ -136,16 +147,17 @@ async function renameTab(t,name){if(!t.nodeId){t.name=name;renderTabs();renderTr
  catch(e){toast('改名失败：'+e.message)}}
 function switchTab(t){cur=t;renderTabs();renderTree();refreshRoots();switchTabMsgs(t)}
 function refreshRoots(){fetch('/api/nodes').then(r=>r.json()).then(d=>renderRoots(d.nodes||[])).catch(()=>{})}
+function fmtTime(ms){const d=new Date(ms);const p=n=>String(n).padStart(2,'0');return (d.getMonth()+1)+'-'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function renderRoots(all){const R=document.getElementById('roots');R.innerHTML='';
- const lb=document.createElement('span');lb.style.color='var(--mut)';lb.textContent='主对话';R.appendChild(lb);
  (all||[]).filter(n=>!n.parent_id).forEach(n=>{
   const open=tabs.find(t=>t.nodeId===n.id);
-  const d=document.createElement('span');d.textContent=n.title;
-  d.style.cssText='padding:3px 12px;border:1px solid var(--line);border-radius:12px;cursor:pointer;white-space:nowrap;'+(open&&open===cur?';background:var(--ink);color:#f6f2e9':'');
-  d.title=n.title;d.onclick=()=>{
+  const d=document.createElement('div');d.className='ritem'+(open&&open===cur?' on':'');
+  d.title=n.title;
+  const t=document.createElement('div');t.textContent=n.title;d.appendChild(t);
+  const s=document.createElement('small');s.textContent=fmtTime(n.created_at);d.appendChild(s);
+  d.onclick=()=>{
    if(open){switchTab(open);return}
    const t={id:++tabSeq,nodeId:n.id,name:n.title,parent:null,color:n.color,msgs:null};
-   if(n.parent_id){/* 根无父 */}
    tabs.push(t);switchTab(t)};
   R.appendChild(d)})}
 function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
@@ -259,6 +271,7 @@ function card(n){const d=document.createElement('div');d.className='ncard';
  m.appendChild(a);d.append(hr1,p,hr2,m);return d}
 function setModule(m){document.querySelectorAll('#side button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
  document.getElementById('chat').style.display=m==='chat'?'flex':'none';
+ document.getElementById('clist').style.display=m==='chat'?'flex':'none';
  const N=document.getElementById('notes');N.style.display=m==='note'?'flex':'none';
  document.getElementById('tree').classList.toggle('open',m==='tree');
  if(m==='note')renderNotes();if(m==='tree')renderTree()}
@@ -268,6 +281,8 @@ document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElemen
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};
 document.getElementById('q2').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send2').click()};
 document.getElementById('backBtn').onclick=()=>{if(cur&&cur.parent)switchTab(cur.parent.tab)};
+document.getElementById('newChat').onclick=()=>{setModule('chat');cur=null;renderTabs();renderMsgs();renderTree();refreshRoots();
+ setTimeout(()=>{const q=document.getElementById('q');q&&q.focus()},50)};
 document.getElementById('setBtn').onclick=()=>document.getElementById('drawer').classList.add('open');
 document.getElementById('sClose').onclick=()=>document.getElementById('drawer').classList.remove('open');
 document.getElementById('sSave').onclick=async()=>{

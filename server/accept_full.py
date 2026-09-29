@@ -254,7 +254,7 @@ c.post("/api/chat", json={"nodeId": sn, "text": "总结测试问题很长很长�
 r = c.post("/api/nodes/%s/suggest-title" % sn)
 check(r.status_code == 200 and 0 < len(r.json()["title"]) <= 16, "AI总结≤16字")
 check(c.post("/api/nodes/nd_nope/suggest-title").status_code in (400, 404), "坏点拒绝")
-check('id="roots"' in INK and "主对话" in INK, "主对话列表")
+check('id="clist"' in INK and "新对话" in INK, "主对话列表")
 check("location.reload" not in INK, "删空不刷新")
 check("refreshRoots" in INK, "根列表刷新")
 
