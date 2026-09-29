@@ -214,7 +214,16 @@ function syncTreeWidth(){const t=document.getElementById('tree'),h=document.getE
  if(!panels.tree){t.style.width='';h.style.display='none';return}
  t.style.width=treeW()+'px';h.style.display='block'}
 const _mc=document.createElement('canvas').getContext('2d');_mc.font='12px system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
-function treeLabel(n){return n.title.length>12?n.title.slice(0,12)+'…':n.title}
+const NODE_W=120,NODE_H=90;
+function treeLines(title,maxW){const s=String(title==null?'':title);
+ const fits=t=>{try{return _mc.measureText(t).width<=maxW}catch(_){return t.length*12<=maxW}};
+ let i=0,l1='',l2='';
+ while(i<s.length&&fits(l1+s[i]))l1+=s[i++];
+ while(i<s.length&&fits(l2+s[i]))l2+=s[i++];
+ if(i>=s.length)return l2?[l1,l2]:[l1];
+ if(l2)return[l1,l2.slice(0,-1)+'…'];
+ if(l1)return[l1.slice(0,-1)+'…'];
+ return[s.slice(0,1)+'…']}
 function treeKids(){const kids={};nodesCache.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});return kids}
 function renderTree(){
  document.querySelectorAll('#treeTog button').forEach(b=>b.classList.toggle('on',b.dataset.v===treeMode));
@@ -242,9 +251,9 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
  const vp=document.createElementNS(NS,'g');vp.setAttribute('id','vp');svg.appendChild(vp);
  if(!nodesCache.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';vp.appendChild(t);svg.setAttribute('width',200);svg.setAttribute('height',40);return}
  const kids=treeKids();
- const W=n=>{let w=54;try{w=Math.ceil(_mc.measureText(treeLabel(n)).width)+46}catch(_){w=treeLabel(n).length*12+46}return w};
+ const W=n=>NODE_W;
  const NW={};nodesCache.forEach(n=>NW[n.id]=W(n));
- const BH={};nodesCache.forEach(n=>BH[n.id]=Math.round(Math.min(110,Math.max(44,NW[n.id]*3/4))));
+ const BH={};nodesCache.forEach(n=>BH[n.id]=NODE_H);
  const GAP=26,HGAP=34,BM=30;let cursor=14;const pos={};let maxD=0;
  const layoutBlock=(id,depth)=>{ // 子树块：兄弟并排，父居中；depth 显式下传
   maxD=Math.max(maxD,depth);
@@ -296,8 +305,11 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
   g.appendChild(rc);
   const dt=document.createElementNS(NS,'circle');dt.setAttribute('cx',c.x+11);dt.setAttribute('cy',y);dt.setAttribute('r',4);
   dt.setAttribute('fill',o.n.color||'#c9d3e0');g.appendChild(dt);
-  const tx=document.createElementNS(NS,'text');tx.setAttribute('x',c.x+20);tx.setAttribute('y',y+4);
-  tx.textContent=treeLabel(o.n);
+  const tx=document.createElementNS(NS,'text');
+  const lines=treeLines(o.n.title,NODE_W-46);
+  if(lines.length>1){tx.setAttribute('x',c.x+20);tx.setAttribute('y',y-3);
+   lines.forEach((ln,k)=>{const ts=document.createElementNS(NS,'tspan');ts.setAttribute('x',c.x+20);if(k>0)ts.setAttribute('dy',15);ts.textContent=ln;tx.appendChild(ts)})}
+  else{tx.setAttribute('x',c.x+20);tx.setAttribute('y',y+4);tx.textContent=lines[0]}
   const ti=document.createElementNS(NS,'title');ti.textContent=o.n.title;tx.appendChild(ti);g.appendChild(tx);
   g.addEventListener('click',(e)=>{if(suppressClick){suppressClick=false;return}if(e.ctrlKey||e.metaKey)toggleSel(o.n.id);else openNode(o.n)});
   g.addEventListener('contextmenu',(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,o.n)});vp.appendChild(g)})}
