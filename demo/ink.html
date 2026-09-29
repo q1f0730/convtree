@@ -253,6 +253,7 @@ function renderRoots(all){const R=document.getElementById('roots');R.innerHTML='
    if(op){switchTab(op);return}
    const t={id:++tabSeq,nodeId:n.id,name:n.title,parent:null,color:n.color,msgs:null};
    tabs.push(t);switchTab(t)};
+  d.oncontextmenu=(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,n)};
   R.appendChild(d)})}
 function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  const bb=document.getElementById('backbar');
@@ -409,7 +410,7 @@ function showTreeMenu(x,y,n){const M=document.getElementById('treemenu');M.inner
  const cnt=subtreeIds(n.id).length;
  const add=(label,fn)=>{const b=document.createElement('button');b.className='danger';b.textContent=label;b.onclick=fn;M.appendChild(b)};
  if(selNodes.size>1&&selNodes.has(n.id))add('删除所选 '+selNodes.size+' 个分支（共 '+unionCount([...selNodes])+' 个节点）',()=>treeMenuConfirm(n,'sel'));
- add(cnt>1?('删除该分支（含 '+(cnt-1)+' 个子节点）'):'删除该分支',()=>treeMenuConfirm(n,'one'));
+ add(cnt>1?((!n.parent_id?'删除该对话（含 '+(cnt-1)+' 个分支）':'删除该分支（含 '+(cnt-1)+' 个子节点）')):(!n.parent_id?'删除该对话':'删除该分支'),()=>treeMenuConfirm(n,'one'));
  M.style.display='block';M.style.left=Math.min(x,innerWidth-250)+'px';M.style.top=(y+6)+'px'}
 function treeMenuConfirm(n,which){const M=document.getElementById('treemenu');M.innerHTML='';
  const ids=which==='sel'?[...selNodes]:[n.id];const total=unionCount(ids);

@@ -301,6 +301,10 @@ check(c.post("/api/branch", json={"parentId": del_ch, "anchorText": "x"}).status
 check(c.post("/api/nodes/%s/rename" % del_gr, json={"title": "x"}).status_code == 404, "已删改名404")
 check(c.post("/api/nodes/%s/delete" % del_ch).status_code == 404, "重复删404")
 check(c.post("/api/nodes/nd_nope/delete").status_code == 404, "坏点删404")
+r = c.post("/api/nodes/%s/delete" % del_root)
+check(r.status_code == 200 and r.json()["deleted"] == [del_root], "删根对话")
+check(del_root not in [n["id"] for n in c.get("/api/nodes").json()["nodes"]], "根从列表消失")
+check('删除该对话' in INK, "侧栏右键删对话")
 check(len(store_mod.list_messages(del_gr)) == 2, "消息行冻结保留")
 check(build_context(del_gr) == [], "已删无上下文")
 import sqlite3 as _sq
