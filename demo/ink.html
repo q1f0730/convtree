@@ -5,12 +5,12 @@
 :root{--bg:#f3f6fa;--card:#ffffff;--ink:#2c3644;--mut:#8b95a5;--line:#e2e8f0;--acc:#5b8ab0;--acc-soft:rgba(91,138,176,.12);--acc-faint:rgba(91,138,176,.06)}
 *{box-sizing:border-box}
 body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;margin:0;color:var(--ink);height:100vh;display:flex;background:linear-gradient(180deg,#f7fafc 0%,var(--bg) 30%)}
-#side{width:60px;background:transparent;display:flex;flex-direction:column;align-items:center;padding-top:22px;gap:12px}
+#side{width:60px;background:transparent;display:flex;flex-direction:column;align-items:center;padding-top:22px;gap:12px;border-right:1px solid var(--line)}
 #side button{width:40px;height:40px;border:0;background:none;font-size:19px;border-radius:12px;cursor:pointer;color:var(--mut);transition:all .2s;display:flex;align-items:center;justify-content:center}
 #side button svg{width:21px;height:21px;display:block}
 #side button:hover{background:#e8eef5;color:var(--ink)}
 #side button.on{background:var(--acc-soft);color:var(--acc)}
-#clist{width:236px;flex:none;display:flex;flex-direction:column;padding:20px 12px;gap:6px;overflow-y:auto}
+#clist{width:236px;flex:none;display:flex;flex-direction:column;padding:20px 12px;gap:6px;overflow-y:auto;border-right:1px solid var(--line);background:rgba(255,255,255,.6)}
 #newChat{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:11px;cursor:pointer;font-family:inherit;font-size:14px;color:var(--ink);box-shadow:0 2px 10px rgba(91,138,176,.08);transition:all .2s}
 #newChat:hover{border-color:var(--acc);color:var(--acc)}
 #roots{display:flex;flex-direction:column;gap:4px;margin-top:8px}
@@ -21,15 +21,15 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #main{flex:1;display:flex;min-width:0}
 #center{flex:1;display:flex;flex-direction:column;min-width:0}
 #cv{flex:1;display:flex;min-height:0}
-#tabs{display:flex;gap:2px;padding:16px 24px 0;align-items:flex-end;overflow-x:auto}
-.tab{position:relative;padding:8px 30px 10px 14px;border:0;background:none;font-size:13.5px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent;font-family:inherit;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .15s}
+#tabs{display:flex;gap:2px;padding:16px 24px 0;align-items:flex-end;overflow-x:auto;border-bottom:1px solid var(--line)}
+.tab{position:relative;padding:8px 30px 10px 14px;margin-bottom:-1px;border:0;background:none;font-size:13.5px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent;font-family:inherit;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .15s}
 .tab.on{color:var(--ink);border-bottom-color:var(--acc);font-weight:600}
 .tab .x{display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--mut);border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:13px}
 .tab:hover .x{display:block}
 .tab .x:hover{background:#dde5ee;color:var(--ink)}
 
 #tree{width:0;overflow:hidden;transition:width .2s}
-#tree.open{width:250px;border-right:1px solid var(--line)}
+#tree.open{width:250px;border-right:1px solid var(--line);background:rgba(255,255,255,.6)}
 #tree .hd{padding:18px 18px 8px;font-size:12px;letter-spacing:3px;color:var(--mut)}
 #treeList{padding:4px 12px;font-size:14px;overflow:auto;flex:1;min-height:0}
 #tree.open.wide{width:340px}
