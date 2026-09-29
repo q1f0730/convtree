@@ -244,7 +244,7 @@ function visibleNodes(){
  if(!rid)return nodesCache;
  const kids=treeKids();const out=[];
  const walk=(id)=>{const n=nodesCache.find(x=>x.id===id);if(!n)return;out.push(n);(kids[id]||[]).forEach(c=>walk(c.id))};
- walk(rid);return out}
+ walk(rid);if(!out.length)return nodesCache;return out}
 function renderTree(){
  document.querySelectorAll('#treeTog button').forEach(b=>b.classList.toggle('on',b.dataset.v===treeMode));
  document.getElementById('tree').classList.toggle('wide',treeMode==='graph');
@@ -480,10 +480,6 @@ async function fetchMsgs(nodeId){const gm=fetch('/api/nodes/'+nodeId+'/messages'
 async function refreshMsgs(t){t=t||cur;if(!t||!t.nodeId)return;
  try{t.msgs=await fetchMsgs(t.nodeId);if(t===cur)renderMsgs()}catch(_){}
  renderTree();refreshRoots()}
-function streamInto(el,full,done){let i=0;el.textContent='';
- (function tick(){i+=2;el.textContent=full.slice(0,i);
-  el.parentNode.scrollTop=el.parentNode.scrollHeight;
-  if(i<full.length)setTimeout(tick,12);else done&&done()})()}
 async function send(text){text=(text||'').trim();if(!text)return;
  if(!cur){cur={id:++tabSeq,nodeId:null,name:'未命名',parent:null,color:null,msgs:[]};tabs.push(cur);renderTabs()}
  const first=cur.msgs!==null&&cur.msgs.length===0;
@@ -561,7 +557,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('#fmtmenu')&&!e.targe
 async function openRef(id){let n=nodesCache.find(x=>x.id===id);
  if(!n){try{const d=await (await fetch('/api/nodes')).json();nodesCache=d.nodes||[];renderRoots(nodesCache);renderTree();n=nodesCache.find(x=>x.id===id)}catch(_){}}
  if(n)openNode(n);else toast('分支不在了（可能已删）')}
-document.getElementById('msgs').addEventListener('click',e=>{const m=e.target.closest&&e.target.closest('mark.hl');if(!m||!m.dataset.ref)return;openRef(m.dataset.ref)});
+document.getElementById('msgs').addEventListener('click',e=>{const m=e.target.closest&&e.target.closest('mark.hl');if(!m||!m.dataset.ref)return;const s=getSelection();if(s&&!s.isCollapsed)return;openRef(m.dataset.ref)});
 async function textAct(act,info){
  if(!cur){toast('先开一个对话');return}
  const txt=info.text;
