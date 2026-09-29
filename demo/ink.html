@@ -268,13 +268,20 @@ function card(n){const d=document.createElement('div');d.className='ncard';
  const a=document.createElement('a');a.textContent='出自：'+n.from;
  a.onclick=()=>{const t=tabs.find(t=>t.name===n.from);if(t){setModule('chat');switchTab(t)}else toast('原分支已关闭（原型）')};
  m.appendChild(a);d.append(hr1,p,hr2,m);return d}
-function setModule(m){document.querySelectorAll('#side button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
- document.getElementById('chat').style.display=m==='chat'?'flex':'none';
- document.getElementById('clist').style.display=m==='chat'?'flex':'none';
- const N=document.getElementById('notes');N.style.display=m==='note'?'flex':'none';
- document.getElementById('tree').classList.toggle('open',m==='tree');
- if(m==='note')renderNotes();if(m==='tree')renderTree()}
-document.querySelectorAll('#side button').forEach(b=>b.onclick=()=>setModule(b.dataset.m));
+const panels={chat:true,note:false,tree:false};
+function syncPanels(){document.querySelectorAll('#side button[data-m]').forEach(b=>b.classList.toggle('on',!!panels[b.dataset.m]));
+ document.getElementById('chat').style.display=panels.chat?'flex':'none';
+ document.getElementById('clist').style.display=panels.chat?'flex':'none';
+ document.getElementById('notes').style.display=panels.note?'flex':'none';
+ document.getElementById('tree').classList.toggle('open',panels.tree);
+ if(panels.note)renderNotes();if(panels.tree)renderTree()}
+function setModule(m){if(m)panels[m]=true;syncPanels()}
+document.querySelectorAll('#side button').forEach(b=>b.onclick=()=>{
+ if(!b.dataset.m)return;
+ panels[b.dataset.m]=!panels[b.dataset.m];
+ const on=Object.values(panels).some(Boolean);
+ if(!on)panels[b.dataset.m]=true; /* 至少留一栏，防全关白屏 */
+ syncPanels()});
 document.getElementById('send').onclick=()=>{send(document.getElementById('q').value);document.getElementById('q').value=''};
 document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};

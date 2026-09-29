@@ -255,6 +255,8 @@ r = c.post("/api/nodes/%s/suggest-title" % sn)
 check(r.status_code == 200 and 0 < len(r.json()["title"]) <= 16, "AI总结≤16字")
 check(c.post("/api/nodes/nd_nope/suggest-title").status_code in (400, 404), "坏点拒绝")
 check('id="clist"' in INK and "新对话" in INK, "主对话列表")
+check("syncPanels" in INK and "panels[" in INK, "多栏独立开关")
+check("至少留一栏" in INK, "防全关白屏")
 check("location.reload" not in INK, "删空不刷新")
 check("refreshRoots" in INK, "根列表刷新")
 
