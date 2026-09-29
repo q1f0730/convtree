@@ -128,6 +128,26 @@ def node_messages(node_id: str):
     return {"path": store.node_path(node_id), "messages": store.list_messages(node_id)}
 
 
+@app.post("/api/nodes/{node_id}/suggest-title")
+def suggest_title(node_id: str):
+    """AI 总结分支名：取首个 user 问题浓缩≤12 字；未配模型/失败→截断回落。"""
+    msgs = [m for m in store.list_messages(node_id) if m["role"] == "user"]
+    if not msgs:
+        raise HTTPException(400, "尚无提问")
+    q = msgs[0]["content"]
+    try:
+        text, _ = llm.chat_sync([
+            {"role": "user", "content": "用不超过10个字概括下面的问题，只给标题不给解释：\n" + q}])
+        title = text.strip().strip("\"'“”‘’：:。.!?！？").replace("\n", " ")
+        title = title[:16] or q[:12]
+    except Exception:
+        title = q[:12] + ("…" if len(q) > 12 else "")
+    try:
+        return store.rename_node(node_id, title)
+    except (LookupError, ValueError) as exc:
+        raise HTTPException(404 if isinstance(exc, LookupError) else 400, str(exc))
+
+
 @app.post("/api/nodes/{node_id}/rename")
 def rename(node_id: str, body: RenameIn):
     try:

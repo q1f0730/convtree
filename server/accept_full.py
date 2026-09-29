@@ -247,6 +247,13 @@ for d in ("server", "tools"):
 check(okc, "全py可编译")
 check('charset="utf-8"' in INK or "charset=utf-8" in INK, "utf8声明")
 check("sClose" in INK, "抽屉有关闭")
+r = c.post("/api/branch", json={"parentId": root, "anchorText": "总结 Sebastian"})
+sn = r.json()["node"]["id"]
+check(c.post("/api/nodes/%s/suggest-title" % sn).status_code == 400, "无问题400")
+c.post("/api/chat", json={"nodeId": sn, "text": "总结测试问题很长很长很长很长"})
+r = c.post("/api/nodes/%s/suggest-title" % sn)
+check(r.status_code == 200 and 0 < len(r.json()["title"]) <= 16, "AI总结≤16字")
+check(c.post("/api/nodes/nd_nope/suggest-title").status_code in (400, 404), "坏点拒绝")
 check('id="roots"' in INK and "主对话" in INK, "主对话列表")
 check("location.reload" not in INK, "删空不刷新")
 check("refreshRoots" in INK, "根列表刷新")

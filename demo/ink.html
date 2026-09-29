@@ -199,7 +199,9 @@ async function send(text){text=(text||'').trim();if(!text)return;
    else if(m[1]==='done'){doneId=d.nodeId}}}
  if(doneId)cur.nodeId=doneId;
  cur.msgs.push({role:'a',text:full});
- if(first){cur.name=text.length>12?text.slice(0,12)+'…':text;renderTabs()}
+ if(first){cur.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
+  fetch('/api/nodes/'+cur.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
+   if(d&&d.title&&cur.name!==d.title&&(cur.name.endsWith('…')||cur.name==='未命名')){cur.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}
  renderTree();refreshRoots()}
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
