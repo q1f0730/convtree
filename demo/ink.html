@@ -465,7 +465,7 @@ function rangeToSrc(range,bubble,msg){const a=plainOffset(bubble,range.startCont
  const convS=(pp)=>{for(const e of table){if(pp>=e.acc&&pp<e.acc+e.at.t.length)return e.at.s0+(pp-e.acc)}return null};
  const convE=(pp)=>{for(const e of table){if(pp>e.acc&&pp<=e.acc+e.at.t.length)return e.at.s0+(pp-e.acc)}return null};
  const s0=convS(a),s1=convE(b);if(s0==null||s1==null||s1<=s0)return null;return{a:s0,b:s1}}
-function bubbleMid(range){try{const sc=range.startContainer;const el=sc.nodeType===1?sc:sc.parentElement;const b=el&&el.closest?el.closest('.msg-u,.msg-a'):null;return b?{mid:b.dataset.mid||null,el:b}:null}catch(_){return null}}
+function bubbleMid(range){try{const sc=range.startContainer;const el=sc.nodeType===1?sc:sc.parentElement;const b=el&&el.closest?el.closest('.msg-u,.msg-a'):null;if(!b||!b.isConnected)return null;return{mid:b.dataset.mid||null,el:b}}catch(_){return null}}
 function findMsg(mid){return cur&&cur.msgs?cur.msgs.find(m=>m.mid===mid):null}
 function attachOvs(msgs,ovs,nodeId){const byMid={};(ovs||[]).forEach(x=>{(byMid[x.message_id]=byMid[x.message_id]||[]).push({message_id:x.message_id,start:x.start,end:x.end,kind:x.kind,color:x.color,val:parseStyle(x.value),ref_node:x.ref_node})});
  const kids=nodesCache.filter(n=>n.parent_id===nodeId&&n.anchor_text);

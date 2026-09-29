@@ -160,6 +160,8 @@ r = c.post("/api/branch", json={"parentId": root, "anchorText": "t", "title": "�
 check(r.json()["node"]["title"] == "自定名", "自定标题")
 check(c.post("/api/branch", json={"parentId": "nd_nope", "anchorText": "x"}).status_code == 404, "坏父404")
 check(c.post("/api/branch", json={"parentId": root}).status_code == 422, "缺锚422")
+check(c.post("/api/branch", json={"parentId": root, "anchorText": "   "}).status_code == 400, "空锚400")
+check("isConnected" in INK, "选区防游离")
 br = r.json()["node"]["id"]
 r = c.post("/api/nodes/%s/rename" % br, json={"title": "新名"})
 check(r.json()["title"] == "新名", "改名")

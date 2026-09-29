@@ -282,6 +282,8 @@ def get_notes():
 
 @app.post("/api/branch")
 def branch(body: BranchIn):
+    if not (body.anchorText or "").strip():
+        raise HTTPException(400, "锚文本为空")
     try:
         node = store.create_node(body.parentId, body.title or "未命名",
                                  (body.anchorText or "")[:200], body.color)
