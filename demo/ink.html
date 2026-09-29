@@ -242,7 +242,7 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
  const kids=treeKids();
  const W=n=>{let w=54;try{w=Math.ceil(_mc.measureText(treeLabel(n)).width)+46}catch(_){w=treeLabel(n).length*12+46}return w};
  const NW={};nodesCache.forEach(n=>NW[n.id]=W(n));
- const BH={};nodesCache.forEach(n=>BH[n.id]=Math.min(110,Math.max(44,NW[n.id]*3/4)));
+ const BH={};nodesCache.forEach(n=>BH[n.id]=Math.round(Math.min(110,Math.max(44,NW[n.id]*3/4))));
  const GAP=26,HGAP=34,BM=30;let cursor=14;const pos={};let maxD=0;
  const layoutBlock=(id,depth)=>{ // 子树块：兄弟并排，父居中；depth 显式下传
   maxD=Math.max(maxD,depth);
@@ -259,6 +259,7 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
   pos[id]={x:(fCx+lCx)/2-NW[id]/2,w:NW[id],h:BH[id],depth:depth};
   cursor=startX+blockW+GAP;return blockW};
  nodesCache.filter(n=>!n.parent_id).forEach(r=>{layoutBlock(r.id,0)});
+ Object.keys(pos).forEach(id=>{pos[id].x=Math.round(pos[id].x)});
  const Wd=cursor-GAP+14;
  const rowMH={};Object.keys(pos).forEach(id=>{const q=pos[id];rowMH[q.depth]=Math.max(rowMH[q.depth]||0,q.h)});
  let H=BM*2+maxD*HGAP;for(let d=0;d<=maxD;d++)H+=rowMH[d]||40;
@@ -268,25 +269,27 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
  svg.setAttribute('width',Wd*z);svg.setAttribute('height',svgH);
  vp.setAttribute('transform','translate(0,'+(svgH-H*z)+') scale('+z+')');
  const Yd=[];let yb=H-BM;
- for(let d=0;d<=maxD;d++){const rh=rowMH[d]||40;Yd[d]=yb-rh/2;yb-=rh+(d<maxD?HGAP:0)}
+ for(let d=0;d<=maxD;d++){const rh=rowMH[d]||40;Yd[d]=Math.round(yb-rh/2);yb-=rh+(d<maxD?HGAP:0)}
  const Y=d=>Yd[d];
+ const IR=Math.round;
  const line=d=>{const pa=document.createElementNS(NS,'path');pa.setAttribute('d',d);
-  pa.setAttribute('fill','none');pa.setAttribute('stroke','#b9c7d8');pa.setAttribute('stroke-width','1.5');vp.appendChild(pa)};
+  pa.setAttribute('fill','none');pa.setAttribute('stroke','#b9c7d8');pa.setAttribute('stroke-width','2');vp.appendChild(pa)};
+ const dot=(x,y)=>{const c=document.createElementNS(NS,'circle');c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',2.6);c.setAttribute('fill','#b9c7d8');vp.appendChild(c)};
  const byPar={};Object.keys(pos).forEach(id=>{const n=nodesCache.find(x=>x.id===id);if(n&&n.parent_id&&pos[n.parent_id]){(byPar[n.parent_id]=byPar[n.parent_id]||[]).push(id)}});
  Object.keys(byPar).forEach(pid=>{const pp=pos[pid];const chs=byPar[pid];
-  const px=pp.x+pp.w/2,py=Y(pp.depth)-BH[pid]/2;
-  const ends=chs.map(id=>{const c=pos[id];return{x:c.x+c.w/2,y:Y(pos[id].depth)+BH[id]/2}});
+  const px=IR(pp.x+pp.w/2),py=IR(Y(pp.depth)-BH[pid]/2);
+  const ends=chs.map(id=>{const c=pos[id];return{x:IR(c.x+c.w/2),y:IR(Y(pos[id].depth)+BH[id]/2)}});
   const lo=Math.min.apply(null,ends.map(e=>e.x).concat([px])),hi=Math.max.apply(null,ends.map(e=>e.x).concat([px]));
   if(ends.length===1){line('M '+ends[0].x+' '+ends[0].y+' V '+py);return}
-  const busY=(py+Math.min.apply(null,ends.map(e=>e.y)))/2;
-  ends.forEach(e=>line('M '+e.x+' '+e.y+' V '+busY));
+  const busY=IR((py+Math.min.apply(null,ends.map(e=>e.y)))/2);
+  ends.forEach(e=>{line('M '+e.x+' '+e.y+' V '+busY);dot(e.x,busY)});
   line('M '+lo+' '+busY+' H '+hi);
-  line('M '+px+' '+busY+' V '+py)});
+  line('M '+px+' '+busY+' V '+py);dot(px,busY)});
  const order=[];nodesCache.forEach(n=>{if(pos[n.id])order.push({n:n,depth:pos[n.id].depth})});
  order.forEach(o=>{const c=pos[o.n.id];const y=Y(o.depth);const on=cur&&cur.nodeId===o.n.id;const sel=selNodes.has(o.n.id);
   const g=document.createElementNS(NS,'g');g.setAttribute('class','tn');
   const rc=document.createElementNS(NS,'rect');
-  rc.setAttribute('x',c.x);rc.setAttribute('y',y-BH[o.n.id]/2);rc.setAttribute('width',c.w);rc.setAttribute('height',BH[o.n.id]);rc.setAttribute('rx',8);
+  rc.setAttribute('x',c.x);rc.setAttribute('y',IR(y-BH[o.n.id]/2));rc.setAttribute('width',c.w);rc.setAttribute('height',BH[o.n.id]);rc.setAttribute('rx',8);
   rc.setAttribute('fill',on?'#e3edf5':(sel?'#fdeef4':'#ffffff'));rc.setAttribute('stroke',on?'#5b8ab0':(sel?'#e06ba8':(o.n.color||'#c9d3e0')));rc.setAttribute('stroke-width',(on||sel)?'2':'1.2');
   g.appendChild(rc);
   const dt=document.createElementNS(NS,'circle');dt.setAttribute('cx',c.x+11);dt.setAttribute('cy',y);dt.setAttribute('r',4);
