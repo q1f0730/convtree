@@ -30,7 +30,7 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 .tab .x:hover{background:#dde5ee;color:var(--ink)}
 
 #tree{width:0;overflow:hidden;transition:width .2s;position:relative}
-#tree.open{width:250px;border-right:1px solid var(--line);background:rgba(255,255,255,.6)}
+#tree.open{width:250px;border-left:1px solid var(--line);background:rgba(255,255,255,.6)}
 #tree .hd{padding:18px 18px 8px;font-size:12px;letter-spacing:3px;color:var(--mut)}
 #treeList{padding:4px 12px;font-size:14px;overflow:auto;flex:1;min-height:0}
 #tree.open.wide{width:340px}
@@ -44,7 +44,7 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #treeZoom button{border:1px solid var(--line);background:#fff;border-radius:8px;font-size:12px;padding:2px 8px;cursor:pointer;color:var(--mut);font-family:inherit}
 #treeZoom button:hover{color:var(--acc);border-color:var(--acc)}
 #treeZoom button[data-z="reset"]{min-width:46px}
-#treeResize{position:absolute;top:0;right:-5px;width:11px;height:100%;cursor:ew-resize;z-index:6;display:none}
+#treeResize{position:absolute;top:0;left:-5px;width:11px;height:100%;cursor:ew-resize;z-index:6;display:none}
 #treeResize::after{content:'';position:absolute;top:0;bottom:0;left:4px;width:3px;border-radius:2px;background:transparent;transition:background .15s}
 #treeResize:hover::after{background:var(--acc)}
 .tnode span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -145,8 +145,6 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="roots"></div>
 </div>
 <div id="main">
-<div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span><span id="treeZoom"><button data-z="out">−</button><button data-z="reset">100%</button><button data-z="in">＋</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div>
-<div id="treeResize" title="拖动调整树栏宽度（双击复位）"></div></div>
 <div id="center">
 <div id="tabs"></div>
 <div id="cv">
@@ -157,7 +155,9 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="composer" style="display:none"><input id="q2" placeholder="继续问…" style="flex:1;padding:11px 13px;font-size:15px;border:1px solid #ccc;border-radius:10px"><button id="send2" style="padding:0 22px;border-radius:10px;border:0;background:#222;color:#fff;cursor:pointer">发送</button></div>
 </div>
 <div id="notes"></div>
-</div><div id="batchbar"></div></div></div>
+</div><div id="batchbar"></div></div>
+<div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span><span id="treeZoom"><button data-z="out">−</button><button data-z="reset">100%</button><button data-z="in">＋</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div>
+<div id="treeResize" title="拖动调整树栏宽度（双击复位）"></div></div></div>
 <div id="drawer">
 <div class="sheet">
 <h3>设置</h3><div style="font-size:12px;color:var(--mut)">模型接入 · 密钥只存本机</div>
@@ -554,7 +554,7 @@ function card(n){const d=document.createElement('div');d.className='ncard';
  const a=document.createElement('a');a.textContent='出自：'+n.from;
  a.onclick=()=>{const t=n.nodeId&&nodesCache.find(x=>x.id===n.nodeId);if(t){setModule('chat');openNode(t)}else toast('原分支不在了（可能已删）')};
  m.appendChild(a);d.append(hr1,p,hr2,m);return d}
-const panels={chat:true,note:false,tree:false};
+const panels={chat:true,note:false,tree:true};
 function syncPanels(){document.querySelectorAll('#side button[data-m]').forEach(b=>b.classList.toggle('on',!!panels[b.dataset.m]));
  document.getElementById('chat').style.display=panels.chat?'flex':'none';
  document.getElementById('tabs').style.display=panels.chat?'flex':'none';
@@ -562,14 +562,17 @@ function syncPanels(){document.querySelectorAll('#side button[data-m]').forEach(
  document.getElementById('notes').style.display=panels.note?'flex':'none';
  document.getElementById('tree').classList.toggle('open',panels.tree);syncTreeWidth();
  if(panels.note)renderNotes();if(panels.tree)renderTree()}
-function setModule(m){if(m)panels[m]=true;syncPanels()}
+function setModule(m){if(m==='chat'){panels.chat=true;panels.tree=true;panels.note=false}else if(m)panels[m]=true;syncPanels()}
 document.querySelectorAll('#side button').forEach(b=>b.onclick=(e)=>{
  if(!b.dataset.m)return;
  const m=b.dataset.m;
  if(e.ctrlKey||e.metaKey){panels[m]=!panels[m]; /* ctrl+点：叠加并开 */
   if(!Object.values(panels).some(Boolean))panels[m]=true}
- else{const only=panels[m]&&!Object.keys(panels).some(k=>k!==m&&panels[k]);
-  if(!only){panels.chat=panels.note=panels.tree=false;panels[m]=true}} /* 单击：干净切换 */
+ else if(m==='chat'){panels.chat=true;panels.tree=true;panels.note=false} /* 聊天必带树 */
+ else if(m==='tree'){if(panels.tree){panels.tree=false; /* 收起，只剩聊天 */
+   if(!Object.values(panels).some(Boolean)){panels.chat=true;panels.tree=true}}
+  else{panels.tree=true;panels.chat=true;panels.note=false}} /* 展开必带聊天 */
+ else{panels.chat=false;panels.note=true;panels.tree=false} /* 笔记独占 */
  syncPanels()});
 document.querySelectorAll('#treeTog button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();treeMode=b.dataset.v;renderTree()});
 function zoomGraph(f){const cur=treeZoom!=null?treeZoom:fitZoom();treeZoom=Math.min(2.5,Math.max(.3,cur*f));renderTree()}
@@ -586,7 +589,7 @@ function wireGraphPan(){const svg=document.getElementById('treeGraph');const sc=
 wireGraphPan();
 function wireTreeResize(){const h=document.getElementById('treeResize');if(!h||h._wired)return;h._wired=true;
  h.onpointerdown=(e)=>{e.stopPropagation();e.preventDefault();h._st={x:e.clientX,w:treeW()};document.getElementById('tree').style.transition='none';try{h.setPointerCapture(e.pointerId)}catch(_){}};
- h.onpointermove=(e)=>{const st=h._st;if(!st)return;treeWUser=Math.min(innerWidth-120,Math.max(180,st.w+(e.clientX-st.x)));syncTreeWidth()};
+ h.onpointermove=(e)=>{const st=h._st;if(!st)return;treeWUser=Math.min(innerWidth-120,Math.max(180,st.w-(e.clientX-st.x)));syncTreeWidth()};
  const end=()=>{h._st=null;document.getElementById('tree').style.transition=''};h.onpointerup=end;h.onpointercancel=end;
  h.ondblclick=()=>{treeWUser=null;syncTreeWidth()}}
 wireTreeResize();
@@ -674,5 +677,5 @@ document.getElementById('sTest').onclick=async()=>{
   const root=nodesCache.find(x=>!x.parent_id)||null;
   if(root){cur={id:++tabSeq,nodeId:root.id,name:root.title,parent:null,color:root.color,msgs:null};tabs.push(cur);renderTabs();switchTab(cur)}
   else{renderTabs();renderTree()}
-  refreshRoots()}catch(_){}})();
+  syncPanels();refreshRoots()}catch(_){}})();
 </script></body></html>
