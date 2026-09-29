@@ -305,6 +305,8 @@ r = c.post("/api/nodes/%s/delete" % del_root)
 check(r.status_code == 200 and r.json()["deleted"] == [del_root], "删根对话")
 check(del_root not in [n["id"] for n in c.get("/api/nodes").json()["nodes"]], "根从列表消失")
 check('删除该对话' in INK, "侧栏右键删对话")
+check('class="sheet"' in INK and "backdrop-filter" in INK, "设置独立页")
+check("target.id==='drawer'" in INK, "点空白关设置")
 check(len(store_mod.list_messages(del_gr)) == 2, "消息行冻结保留")
 check(build_context(del_gr) == [], "已删无上下文")
 import sqlite3 as _sq

@@ -79,9 +79,10 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #menu{position:fixed;display:none;background:#2c3644;color:#fff;border-radius:12px;padding:5px;font-size:14px;z-index:50;box-shadow:0 14px 36px rgba(44,54,68,.3);font-family:system-ui}
 #menu button{background:none;border:0;color:#fff;padding:8px 14px;cursor:pointer;font-size:14px;border-radius:8px}
 #menu button:hover{background:#3d4a5c}
-#drawer{display:none;position:fixed;top:0;right:0;width:330px;height:100vh;background:var(--card);border-left:1px solid var(--line);padding:28px;z-index:60;box-shadow:-16px 0 40px rgba(91,138,176,.12)}
-#drawer.open{display:block}
-#drawer h3{margin:0 0 4px;letter-spacing:3px;font-weight:600}
+#drawer{display:none;position:fixed;inset:0;z-index:60;background:rgba(44,54,68,.38);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:24px}
+#drawer.open{display:flex}
+#drawer .sheet{background:var(--card);border-radius:20px;padding:36px 40px;width:min(560px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 30px 80px rgba(44,54,68,.35);animation:up .3s ease}
+#drawer h3{margin:0 0 4px;letter-spacing:4px;font-weight:600;font-size:19px}
 #drawer label{display:block;margin:16px 0 6px;font-size:12px;color:var(--mut);letter-spacing:2px}
 #drawer input,#drawer select{width:100%;padding:10px 12px;font-size:14px;border:1px solid var(--line);border-radius:10px;background:#f8fafc;font-family:inherit}
 #drawer .row{display:flex;gap:8px;margin-top:20px}
@@ -131,6 +132,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="notes"></div>
 </div><div id="batchbar"></div></div></div>
 <div id="drawer">
+<div class="sheet">
 <h3>设置</h3><div style="font-size:12px;color:var(--mut)">模型接入 · 密钥只存本机</div>
 <label>服务商</label><select id="sProv"></select>
 <label>地址 BASE URL</label><input id="sBase" placeholder="https://…">
@@ -138,6 +140,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <label>密钥 API KEY（留空=不改）</label><input id="sKey" type="password" placeholder="sk-…">
 <div class="row"><button id="sSave" class="pri">保存</button><button id="sTest">测试连接</button><button id="sClose">关闭</button></div>
 <div id="drawMsg"></div>
+</div>
 </div>
 <div id="menu"><button data-a="copy">复制</button><button data-a="ul">划线</button><button data-a="note">记笔记</button><button data-a="branch">分支</button></div>
 <div id="treemenu"></div>
@@ -435,7 +438,7 @@ function closeTabsByIds(set){let ch=false;for(let i=tabs.length-1;i>=0;i--){if(s
  if(!cur||set.has(cur.nodeId)){cur=tabs.length?tabs[tabs.length-1]:null}
  renderTabs();if(cur)switchTabMsgs(cur);else renderMsgs()}
 document.addEventListener('click',e=>{if(!e.target.closest('#treemenu'))hideTreeMenu()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const dr=document.getElementById('drawer');if(dr.classList.contains('open')){dr.classList.remove('open');return}if(selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
 document.getElementById('send').onclick=()=>{send(document.getElementById('q').value);document.getElementById('q').value=''};
 document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};
@@ -445,6 +448,7 @@ document.getElementById('newChat').onclick=()=>{setModule('chat');tabs.length=0;
  setTimeout(()=>{const q=document.getElementById('q');q&&q.focus()},50)};
 document.getElementById('setBtn').onclick=()=>document.getElementById('drawer').classList.add('open');
 document.getElementById('sClose').onclick=()=>document.getElementById('drawer').classList.remove('open');
+document.getElementById('drawer').addEventListener('click',e=>{if(e.target.id==='drawer')e.target.classList.remove('open')});
 document.getElementById('sSave').onclick=async()=>{
  const b={provider:document.getElementById('sProv').value,baseUrl:document.getElementById('sBase').value,
   model:document.getElementById('sModel').value,apiKey:document.getElementById('sKey').value};
