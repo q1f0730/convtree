@@ -242,29 +242,45 @@ function renderTreeList(){const L=document.getElementById('treeList');L.innerHTM
 function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=document.getElementById('treeGraph');svg.innerHTML='';
  const vp=document.createElementNS(NS,'g');vp.setAttribute('id','vp');svg.appendChild(vp);
  if(!nodesCache.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';vp.appendChild(t);svg.setAttribute('width',200);svg.setAttribute('height',40);return}
- const kids=treeKids();const order=[];
- const walk=(pid,depth)=>{(kids[pid]||[]).forEach(n=>{order.push({n,depth});walk(n.id,depth+1)})};walk('',0);
- const LH=46,GAP=26;
- const maxD=order.reduce((a,o)=>Math.max(a,o.depth),0);
+ const kids=treeKids();
  const W=n=>{let w=54;try{w=Math.ceil(_mc.measureText(treeLabel(n)).width)+46}catch(_){w=treeLabel(n).length*12+46}return w};
- let xx=14;const pos={};
- order.forEach(o=>{const w=W(o.n);pos[o.n.id]={x:xx,w:w,depth:o.depth};xx+=w+GAP});
- const Wd=xx-GAP+14,H=maxD*LH+76;
+ const NW={};nodesCache.forEach(n=>NW[n.id]=W(n));
+ const GAP=26,LH=46;let cursor=14;const pos={};let maxD=0;
+ const layoutBlock=(id,depth)=>{ // 子树块：兄弟并排，父居中；depth 显式下传
+  maxD=Math.max(maxD,depth);
+  const ch=kids[id]||[];
+  if(!ch.length){pos[id]={x:cursor,w:NW[id],depth:depth};cursor+=NW[id]+GAP;return NW[id]}
+  const startX=cursor;let span=0;
+  ch.forEach(c=>{span+=layoutBlock(c.id,depth+1)+GAP});
+  span-=GAP;
+  const blockW=Math.max(NW[id],span);
+  const shift=(blockW-span)/2; /* 相对居中：cursor 已含起始位，不可再加 */
+  const moveSub=x=>{pos[x].x+=shift;(kids[x]||[]).forEach(c=>moveSub(c.id))};
+  ch.forEach(c=>moveSub(c.id));
+  const fCx=pos[ch[0].id].x+NW[ch[0].id]/2,lCx=pos[ch[ch.length-1].id].x+NW[ch[ch.length-1].id]/2;
+  pos[id]={x:(fCx+lCx)/2-NW[id]/2,w:NW[id],depth:depth};
+  cursor=startX+blockW+GAP;return blockW};
+ nodesCache.filter(n=>!n.parent_id).forEach(r=>{layoutBlock(r.id,0)});
+ const Wd=cursor-GAP+14,H=maxD*LH+76;
  fitBase={w:Wd};const z=effZoom();
- svg.setAttribute('width',Wd*z);svg.setAttribute('height',H*z);
- vp.setAttribute('transform','scale('+z+')');
+ const sc=document.getElementById('treeScroll');
+ const svgH=Math.max(H*z,sc?sc.clientHeight:0);
+ svg.setAttribute('width',Wd*z);svg.setAttribute('height',svgH);
+ vp.setAttribute('transform','translate(0,'+(svgH-H*z)+') scale('+z+')');
  const Y=d=>H-30-d*LH;
  const line=d=>{const pa=document.createElementNS(NS,'path');pa.setAttribute('d',d);
   pa.setAttribute('fill','none');pa.setAttribute('stroke','#b9c7d8');pa.setAttribute('stroke-width','1.5');vp.appendChild(pa)};
- const byPar={};order.forEach(o=>{if(o.n.parent_id&&pos[o.n.parent_id]){(byPar[o.n.parent_id]=byPar[o.n.parent_id]||[]).push(o)}});
+ const byPar={};Object.keys(pos).forEach(id=>{const n=nodesCache.find(x=>x.id===id);if(n&&n.parent_id&&pos[n.parent_id]){(byPar[n.parent_id]=byPar[n.parent_id]||[]).push(id)}});
  Object.keys(byPar).forEach(pid=>{const pp=pos[pid];const chs=byPar[pid];
   const px=pp.x+pp.w/2,py=Y(pp.depth)-12;
-  const ends=chs.map(o=>{const c=pos[o.n.id];return{x:c.x+c.w/2,y:Y(o.depth)+12}});
-  if(ends.length===1){const my=(py+ends[0].y)/2;line('M '+ends[0].x+' '+ends[0].y+' V '+my+' H '+px+' V '+py);return}
+  const ends=chs.map(id=>{const c=pos[id];const dd=nodesCache.find(x=>x.id===id);return{x:c.x+c.w/2,y:Y(pos[id].depth)+12}});
+  const lo=Math.min.apply(null,ends.map(e=>e.x).concat([px])),hi=Math.max.apply(null,ends.map(e=>e.x).concat([px]));
+  if(ends.length===1){line('M '+ends[0].x+' '+ends[0].y+' V '+py);return}
   const busY=(py+Math.min.apply(null,ends.map(e=>e.y)))/2;
   ends.forEach(e=>line('M '+e.x+' '+e.y+' V '+busY));
-  const xs=ends.map(e=>e.x);line('M '+Math.min.apply(null,xs)+' '+busY+' H '+Math.max.apply(null,xs));
+  line('M '+lo+' '+busY+' H '+hi);
   line('M '+px+' '+busY+' V '+py)});
+ const order=[];nodesCache.forEach(n=>{if(pos[n.id])order.push({n:n,depth:pos[n.id].depth})});
  order.forEach(o=>{const c=pos[o.n.id];const y=Y(o.depth);const on=cur&&cur.nodeId===o.n.id;const sel=selNodes.has(o.n.id);
   const g=document.createElementNS(NS,'g');g.setAttribute('class','tn');
   const rc=document.createElementNS(NS,'rect');
