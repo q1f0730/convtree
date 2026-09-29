@@ -37,6 +37,13 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #tree.open{display:flex;flex-direction:column}
 #tree .hd{flex:none}
 #treeScroll{overflow:auto;flex:1;min-height:0}
+#treeScroll.dots{background-image:radial-gradient(circle,#bcc9d9 1px,transparent 1.3px);background-size:22px 22px}
+#treeGraph{cursor:grab}
+#treeGraph.panning{cursor:grabbing}
+#treeZoom{margin-left:6px;display:flex;gap:4px;align-items:center}
+#treeZoom button{border:1px solid var(--line);background:#fff;border-radius:8px;font-size:12px;padding:2px 8px;cursor:pointer;color:var(--mut);font-family:inherit}
+#treeZoom button:hover{color:var(--acc);border-color:var(--acc)}
+#treeZoom button[data-z="reset"]{min-width:46px}
 .tnode span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tree .hd{display:flex;align-items:center;gap:8px}
 #treeTog{margin-left:auto;display:flex;gap:4px}
@@ -135,7 +142,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="roots"></div>
 </div>
 <div id="main">
-<div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div></div>
+<div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span><span id="treeZoom"><button data-z="out">−</button><button data-z="reset">100%</button><button data-z="in">＋</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div></div>
 <div id="center">
 <div id="tabs"></div>
 <div id="cv">
@@ -193,6 +200,7 @@ function openNode(n){if(!n)return;const ensure=(x)=>{let t=tabs.find(y=>y.nodeId
   if(p)t.parent={tab:ensure(p)}}
  switchTab(t)}
 let treeMode='graph';
+let treeZoom=1,suppressClick=false;
 const _mc=document.createElement('canvas').getContext('2d');_mc.font='12px system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 function treeLabel(n){return n.title.length>12?n.title.slice(0,12)+'…':n.title}
 function treeKids(){const kids={};nodesCache.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});return kids}
@@ -201,6 +209,9 @@ function renderTree(){
  document.getElementById('tree').classList.toggle('wide',treeMode==='graph');
  document.getElementById('treeList').style.display=treeMode==='list'?'block':'none';
  document.getElementById('treeGraph').style.display=treeMode==='graph'?'block':'none';
+ document.getElementById('treeScroll').classList.toggle('dots',treeMode==='graph');
+ document.getElementById('treeZoom').style.display=treeMode==='graph'?'flex':'none';
+ document.querySelector('#treeZoom button[data-z="reset"]').textContent=Math.round(treeZoom*100)+'%';
  if(treeMode==='list')renderTreeList();else renderTreeGraph()}
 function renderTreeList(){const L=document.getElementById('treeList');L.innerHTML='';
  if(!nodesCache.length){const e=document.createElement('div');e.style.cssText='padding:8px 11px;font-size:13px;color:var(--mut)';e.textContent='还没有对话';L.appendChild(e);return}
@@ -215,33 +226,38 @@ function renderTreeList(){const L=document.getElementById('treeList');L.innerHTM
    L.appendChild(d);walk(n.id,depth+1)})};
  walk('',0)}
 function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=document.getElementById('treeGraph');svg.innerHTML='';
- if(!nodesCache.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';svg.appendChild(t);svg.setAttribute('width',200);svg.setAttribute('height',40);return}
+ const vp=document.createElementNS(NS,'g');vp.setAttribute('id','vp');svg.appendChild(vp);
+ if(!nodesCache.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';vp.appendChild(t);svg.setAttribute('width',200);svg.setAttribute('height',40);return}
  const kids=treeKids();const order=[];
  const walk=(pid,depth)=>{(kids[pid]||[]).forEach(n=>{order.push({n,depth});walk(n.id,depth+1)})};walk('',0);
- const RH=34,GAP=30;
- const colW=[];order.forEach(o=>{let w=54;try{w=Math.ceil(_mc.measureText(treeLabel(o.n)).width)+38}catch(_){w=treeLabel(o.n).length*12+38}colW[o.depth]=Math.max(colW[o.depth]||0,w)});
- const X=(d)=>{let x=14;for(let i=0;i<d;i++)x+=colW[i]+GAP;return x};
- const H=order.length*RH+16;let Wd=28;for(let i=0;i<colW.length;i++)Wd+=colW[i]+GAP;
- svg.setAttribute('width',Wd);svg.setAttribute('height',H);
- const pos={};order.forEach((o,i)=>pos[o.n.id]={x:X(o.depth),y:i*RH+24,w:colW[o.depth]});
- order.forEach(o=>{const pp=o.n.parent_id&&pos[o.n.parent_id];if(!pp)return;const c=pos[o.n.id];const x1=pp.x+pp.w,mx=(x1+c.x)/2;
+ const LH=46,GAP=26;
+ const maxD=order.reduce((a,o)=>Math.max(a,o.depth),0);
+ const W=n=>{let w=54;try{w=Math.ceil(_mc.measureText(treeLabel(n)).width)+38}catch(_){w=treeLabel(n).length*12+38}return w};
+ let xx=14;const pos={};
+ order.forEach(o=>{const w=W(o.n);pos[o.n.id]={x:xx,w:w,depth:o.depth};xx+=w+GAP});
+ const Wd=xx-GAP+14,H=maxD*LH+76;
+ svg.setAttribute('width',Wd*treeZoom);svg.setAttribute('height',H*treeZoom);
+ vp.setAttribute('transform','scale('+treeZoom+')');
+ const Y=d=>H-30-d*LH;
+ order.forEach(o=>{const pp=o.n.parent_id&&pos[o.n.parent_id];if(!pp)return;const c=pos[o.n.id];
+  const x1=pp.x+pp.w/2,y1=Y(pp.depth)-12,x2=c.x+c.w/2,y2=Y(o.depth)+12,my=(y1+y2)/2;
   const pa=document.createElementNS(NS,'path');
-  pa.setAttribute('d','M '+x1+' '+pp.y+' H '+mx+' V '+c.y+' H '+c.x);
+  pa.setAttribute('d','M '+x1+' '+y1+' V '+my+' H '+x2+' V '+y2);
   pa.setAttribute('fill','none');pa.setAttribute('stroke','#b9c7d8');pa.setAttribute('stroke-width','1.5');
-  svg.appendChild(pa)});
- order.forEach(o=>{const c=pos[o.n.id];const on=cur&&cur.nodeId===o.n.id;const sel=selNodes.has(o.n.id);
+  vp.appendChild(pa)});
+ order.forEach(o=>{const c=pos[o.n.id];const y=Y(o.depth);const on=cur&&cur.nodeId===o.n.id;const sel=selNodes.has(o.n.id);
   const g=document.createElementNS(NS,'g');g.setAttribute('class','tn');
   const rc=document.createElementNS(NS,'rect');
-  rc.setAttribute('x',c.x);rc.setAttribute('y',c.y-12);rc.setAttribute('width',c.w);rc.setAttribute('height',24);rc.setAttribute('rx',8);
+  rc.setAttribute('x',c.x);rc.setAttribute('y',y-12);rc.setAttribute('width',c.w);rc.setAttribute('height',24);rc.setAttribute('rx',8);
   rc.setAttribute('fill',on?'#e3edf5':(sel?'#fdeef4':'#ffffff'));rc.setAttribute('stroke',on?'#5b8ab0':(sel?'#e06ba8':(o.n.color||'#c9d3e0')));rc.setAttribute('stroke-width',(on||sel)?'2':'1.2');
   g.appendChild(rc);
-  const dt=document.createElementNS(NS,'circle');dt.setAttribute('cx',c.x+11);dt.setAttribute('cy',c.y);dt.setAttribute('r',4);
+  const dt=document.createElementNS(NS,'circle');dt.setAttribute('cx',c.x+11);dt.setAttribute('cy',y);dt.setAttribute('r',4);
   dt.setAttribute('fill',o.n.color||'#c9d3e0');g.appendChild(dt);
-  const tx=document.createElementNS(NS,'text');tx.setAttribute('x',c.x+20);tx.setAttribute('y',c.y+4);
+  const tx=document.createElementNS(NS,'text');tx.setAttribute('x',c.x+20);tx.setAttribute('y',y+4);
   tx.textContent=treeLabel(o.n);
   const ti=document.createElementNS(NS,'title');ti.textContent=o.n.title;tx.appendChild(ti);g.appendChild(tx);
-  g.addEventListener('click',(e)=>{if(e.ctrlKey||e.metaKey)toggleSel(o.n.id);else openNode(o.n)});
-  g.addEventListener('contextmenu',(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,o.n)});svg.appendChild(g)})}
+  g.addEventListener('click',(e)=>{if(suppressClick){suppressClick=false;return}if(e.ctrlKey||e.metaKey)toggleSel(o.n.id);else openNode(o.n)});
+  g.addEventListener('contextmenu',(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,o.n)});vp.appendChild(g)})}
 function startRename(d,t){if(d.querySelector('input'))return;
  const inp=document.createElement('input');inp.value=t.name;
  inp.style.cssText='width:110px;font:inherit;background:#fff;border:1px solid var(--acc);border-radius:4px;padding:1px 4px';
@@ -534,6 +550,18 @@ document.querySelectorAll('#side button').forEach(b=>b.onclick=()=>{
  if(!on)panels[b.dataset.m]=true; /* 至少留一栏，防全关白屏 */
  syncPanels()});
 document.querySelectorAll('#treeTog button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();treeMode=b.dataset.v;renderTree()});
+function zoomGraph(f){treeZoom=Math.min(2.5,Math.max(.4,treeZoom*f));renderTree()}
+document.querySelectorAll('#treeZoom button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();const z=b.dataset.z;if(z==='in')zoomGraph(1.2);else if(z==='out')zoomGraph(1/1.2);else{treeZoom=1;renderTree()}});
+function wireGraphPan(){const svg=document.getElementById('treeGraph');const sc=document.getElementById('treeScroll');
+ svg.onpointerdown=(e)=>{if(e.pointerType==='mouse'&&e.button!==0)return;svg._pan={x:e.clientX,y:e.clientY,sl:sc.scrollLeft,st:sc.scrollTop,moved:false};svg.classList.add('panning');try{svg.setPointerCapture(e.pointerId)}catch(_){}};
+ svg.onpointermove=(e)=>{const p=svg._pan;if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;
+  if(Math.abs(dx)+Math.abs(dy)>4)p.moved=true;
+  if(p.moved){sc.scrollLeft=p.sl-dx;sc.scrollTop=p.st-dy}};
+ const end=()=>{if(svg._pan&&svg._pan.moved)suppressClick=true;svg._pan=null;svg.classList.remove('panning')};
+ svg.onpointerup=end;svg.onpointercancel=end;
+ svg.onwheel=(e)=>{e.preventDefault();zoomGraph(Math.exp(-e.deltaY*0.0015))};
+ svg.ondblclick=(e)=>{if(e.target.closest&&e.target.closest('.tn'))return;treeZoom=1;renderTree()}}
+wireGraphPan();
 const selNodes=new Set();
 function toggleSel(id){if(selNodes.has(id))selNodes.delete(id);else selNodes.add(id);syncBatchbar();renderTree()}
 function subtreeIds(id){const kids=treeKids();const out=[];const walk=(x)=>{out.push(x);(kids[x]||[]).forEach(y=>walk(y.id))};walk(id);return out}
