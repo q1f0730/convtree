@@ -332,6 +332,8 @@ check('id="treemenu"' in INK and 'id="batchbar"' in INK, "删除菜单与批量�
 check("oncontextmenu" in INK and "showTreeMenu" in INK, "树右键菜单")
 check("/delete" in INK and "doDelete" in INK and "selNodes" in INK, "删除接线与多选")
 check("确认删除" in INK, "二次确认")
+check("_mc.measureText" in INK and "colW" in INK, "导图框随文展宽")
+check('id="treeScroll"' in INK, "图谱滚动区")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
