@@ -71,6 +71,15 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 *::-webkit-scrollbar-thumb{background-color:#c3cfdd;border-radius:8px;border:3px solid transparent;background-clip:content-box}
 *::-webkit-scrollbar-thumb:hover{background-color:#9db4c9;border:3px solid transparent;background-clip:content-box}
 *::-webkit-scrollbar-button{display:none;width:0;height:0}
+#fmtmenu{position:fixed;display:none;background:#2c3644;color:#fff;border-radius:12px;padding:10px;font-size:14px;z-index:70;box-shadow:0 14px 36px rgba(44,54,68,.3);font-family:system-ui;min-width:220px}
+#fmtmenu .frow{display:flex;gap:6px;align-items:center}
+#fmtmenu button{background:none;border:1px solid #55606f;color:#fff;padding:6px 12px;cursor:pointer;font-size:14px;border-radius:8px;font-family:inherit}
+#fmtmenu button:hover{background:#3d4a5c}
+#fmtmenu button.on{background:#5b8ab0;border-color:#5b8ab0}
+#fmtmenu button.b{font-weight:700}
+#fmtmenu button.i{font-style:italic}
+#fmtmenu button.go{background:#5b8ab0;border:0}
+#fmtmenu button.ghost{border:0;color:#9aa5b5}
 mark.hl{background:transparent;border-radius:3px;padding:0 2px;box-shadow:inset 0 -0.62em var(--mk,rgba(91,138,176,.28))}
 u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding-bottom:10vh}
@@ -149,8 +158,9 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="drawMsg"></div>
 </div>
 </div>
-<div id="menu"><button data-a="copy">复制</button><button data-a="ul">划线</button><button data-a="note">记笔记</button><button data-a="branch">分支</button></div>
+<div id="menu"><button data-a="copy">复制</button><button data-a="ul">划线</button><button data-a="note">记笔记</button><button data-a="branch">分支</button><button data-a="fmt">格式</button></div>
 <div id="treemenu"></div>
+<div id="fmtmenu"></div>
 <div id="pal"></div>
 <div id="toast"></div>
 <script>
@@ -319,12 +329,25 @@ function mdSeg(s){s=String(s);const atoms=[];
   P('<pre style="background:#f0ebe0;border-radius:8px;padding:10px 12px;overflow-x:auto;font-size:13px">',body,cs,'</pre>');
   pos=fm.index+fm[0].length}
  textPart(s.slice(pos),pos);return atoms}
-function atomsHtml(atoms,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start&&/^#[0-9a-fA-F]{6}$/.test(o.color||''));
+function atomsHtml(atoms,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start&&(o.kind==='style'||/^#[0-9a-fA-F]{6}$/.test(o.color||'')));
  return atoms.map(a=>{if(!a.t)return a.pre+a.post;const L=a.t.length,pts=new Set([0,L]);
   ovs.forEach(o=>{const x=Math.max(0,o.start-a.s0),y=Math.min(L,o.end-a.s0);if(x<y){pts.add(x);pts.add(y)}});
   const sp=[...pts].sort((p,q)=>p-q);let h=a.pre;
   for(let i=0;i<sp.length-1;i++){const x=sp[i],y=sp[i+1];let pt=escH(a.t.slice(x,y));
    const ins=(o)=>a.s0+x>=o.start&&a.s0+y<=o.end;
+   const sty=ovs.filter(o=>o.kind==='style'&&ins(o));
+   if(sty.length){let css='';
+    if(sty.some(o=>o.val&&o.val.b))css+='font-weight:700;';
+    if(sty.some(o=>o.val&&o.val.i))css+='font-style:italic;';
+    const sz=sty.map(o=>o.val&&o.val.size).filter(Boolean);
+    if(sz.indexOf('lg')>=0)css+='font-size:1.2em;';else if(sz.indexOf('sm')>=0)css+='font-size:.85em;';
+    const fn=sty.map(o=>o.val&&o.val.font).filter(Boolean).pop();
+    if(fn==='song')css+="font-family:'SimSun','Songti SC',serif;";
+    if(fn==='kai')css+="font-family:'Kaiti SC','STKaiti','KaiTi',cursive;";
+    if(fn==='mono')css+="font-family:ui-monospace,'SF Mono',Consolas,monospace;";
+    const ops=sty.map(o=>o.val&&o.val.op).filter(v=>typeof v==='number');
+    if(ops.length)css+='opacity:'+(Math.min.apply(null,ops)/100)+';';
+    if(css)pt='<span style="'+css+'">'+pt+'</span>'}
    ovs.forEach(o=>{if(o.kind==='ul'&&ins(o))pt='<u class="uln" style="text-decoration-color:'+o.color+'">'+pt+'</u>'});
    ovs.forEach(o=>{if(o.kind==='mark'&&ins(o))pt='<mark class="hl" style="--mk:'+o.color+'55">'+pt+'</mark>'});
    h+=pt}
@@ -341,7 +364,7 @@ function rangeToSrc(range,bubble,msg){const a=plainOffset(bubble,range.startCont
  const s0=conv(a),s1=conv(b);if(s0==null||s1==null||s1<=s0)return null;return{a:s0,b:s1}}
 function bubbleMid(range){try{const sc=range.startContainer;const el=sc.nodeType===1?sc:sc.parentElement;const b=el&&el.closest?el.closest('.msg-u,.msg-a'):null;return b?{mid:b.dataset.mid||null,el:b}:null}catch(_){return null}}
 function findMsg(mid){return cur&&cur.msgs?cur.msgs.find(m=>m.mid===mid):null}
-function attachOvs(msgs,ovs,nodeId){const byMid={};(ovs||[]).forEach(x=>{(byMid[x.message_id]=byMid[x.message_id]||[]).push({message_id:x.message_id,start:x.start,end:x.end,kind:x.kind,color:x.color,ref_node:x.ref_node})});
+function attachOvs(msgs,ovs,nodeId){const byMid={};(ovs||[]).forEach(x=>{(byMid[x.message_id]=byMid[x.message_id]||[]).push({message_id:x.message_id,start:x.start,end:x.end,kind:x.kind,color:x.color,val:parseStyle(x.value),ref_node:x.ref_node})});
  const kids=nodesCache.filter(n=>n.parent_id===nodeId&&n.anchor_text);
  return msgs.map(m=>{const list=(byMid[m.mid]||[]).slice();
   kids.forEach(k=>{const at=m.text.indexOf(k.anchor_text);
@@ -403,6 +426,33 @@ document.getElementById('menu').addEventListener('click',e=>{
  const info=document.getElementById('menu')._info;
  document.getElementById('menu').style.display='none';if(!info)return;
  const act=b.dataset.a;textAct(act,info);getSelection().removeAllRanges()});
+function parseStyle(v){try{const o=JSON.parse(v);return o&&typeof o==='object'?o:null}catch(_){return null}}
+const fmtState={b:false,i:false,size:'',font:'',op:100};
+function resetFmt(){fmtState.b=false;fmtState.i=false;fmtState.size='';fmtState.font='';fmtState.op=100}
+function fmtVal(){const o={};if(fmtState.b)o.b=1;if(fmtState.i)o.i=1;if(fmtState.size)o.size=fmtState.size;if(fmtState.font)o.font=fmtState.font;if(fmtState.op!==100)o.op=fmtState.op;return JSON.stringify(o)}
+function hideFmtMenu(){document.getElementById('fmtmenu').style.display='none'}
+function showFmtMenu(){resetFmt();const M=document.getElementById('fmtmenu');M.innerHTML='';
+ const mm=document.getElementById('menu');M.style.left=mm.style.left;M.style.top=mm.style.top;
+ const tbar=document.createElement('div');tbar.className='frow';
+ const tg=(label,cls,get,set)=>{const b=document.createElement('button');b.textContent=label;if(cls)b.className=cls;b.onclick=()=>{set(!get());b.classList.toggle('on',get())};tbar.appendChild(b);return b};
+ tg('B','b',()=>fmtState.b,v=>fmtState.b=v);tg('I','i',()=>fmtState.i,v=>fmtState.i=v);
+ M.appendChild(tbar);
+ const srow=document.createElement('div');srow.className='frow';srow.style.marginTop='6px';
+ const single=(group,label,v)=>{const b=document.createElement('button');b.textContent=label;b._v=v;b._g=group;b.onclick=()=>{fmtState[group]=fmtState[group]===v?'':v;srow.querySelectorAll('button').forEach(g=>{if(g._g===group)g.classList.toggle('on',fmtState[group]===g._v)})};srow.appendChild(b)};
+ single('size','小','sm');single('size','大','lg');single('font','宋','song');single('font','楷','kai');single('font','码','mono');
+ M.appendChild(srow);
+ const orow=document.createElement('div');orow.className='frow';orow.style.marginTop='6px';
+ const lab=document.createElement('span');lab.textContent='透明度';lab.style.color='#9aa5b5';orow.appendChild(lab);
+ const rg=document.createElement('input');rg.type='range';rg.min='30';rg.max='100';rg.value='100';rg.style.accentColor='#8fb4d8';rg.style.width='100px';
+ const vv=document.createElement('span');vv.textContent='100';vv.style.minWidth='26px';vv.style.textAlign='right';
+ rg.oninput=()=>{fmtState.op=+rg.value;vv.textContent=rg.value};orow.appendChild(rg);orow.appendChild(vv);M.appendChild(orow);
+ const act=document.createElement('div');act.className='frow';act.style.marginTop='8px';
+ const go=document.createElement('button');go.className='go';go.textContent='应用';go.onclick=()=>{hideFmtMenu();const info=M._info;if(info)textAct('fmtgo',info)};act.appendChild(go);
+ const back=document.createElement('button');back.textContent='取消';back.onclick=hideFmtMenu;act.appendChild(back);
+ const clr=document.createElement('button');clr.className='ghost';clr.textContent='清除格式';clr.onclick=()=>{hideFmtMenu();const info2=M._info;if(info2)textAct('clearfmt',info2)};act.appendChild(clr);
+ M.appendChild(act);M._info=document.getElementById('menu')._info;M.style.display='block'}
+document.getElementById('fmtmenu').addEventListener('click',e=>e.stopPropagation());
+document.addEventListener('click',e=>{if(!e.target.closest('#fmtmenu'))hideFmtMenu()});
 async function textAct(act,info){
  const txt=info.text;
  if(act==='copy'){navigator.clipboard&&navigator.clipboard.writeText(txt);toast('已复制')}
@@ -414,6 +464,22 @@ async function textAct(act,info){
    m.ov.push({message_id:m.mid,start:ov.start,end:ov.end,kind:'ul',color:ov.color});renderMsgs();toast('已划线（默认黄）')}
   catch(e){toast('划线失败：'+e.message)}}
  else if(act==='note'){addNote(txt);toast('已记入笔记本')}
+ else if(act==='fmt'){document.getElementById('menu').style.display='none';showFmtMenu()}
+ else if(act==='fmtgo'){const bm0=bubbleMid(info.range);const m0=bm0&&bm0.mid&&findMsg(bm0.mid);
+  if(!m0){toast('等本轮落库后再排版');return}
+  const off0=rangeToSrc(info.range,bm0.el,m0);if(!off0){toast('这次选区定位失败，换一段试试');return}
+  const v=fmtVal();if(v==='{}'){toast('先选个格式（加粗/字号…）');return}
+  try{const r=await fetch('/api/overlays',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nodeId:cur.nodeId,messageId:m0.mid,kind:'style',start:off0.a,end:off0.b,value:v})});
+   if(!r.ok)throw new Error((await r.text()).slice(0,100));const ov=await r.json();
+   m0.ov.push({message_id:m0.mid,start:ov.start,end:ov.end,kind:'style',color:null,val:parseStyle(ov.value)});renderMsgs();toast('已排版')}
+  catch(e){toast('排版失败：'+e.message)}}
+ else if(act==='clearfmt'){const bm2=bubbleMid(info.range);const m2=bm2&&bm2.mid&&findMsg(bm2.mid);
+  if(!m2){toast('等本轮落库后再操作');return}
+  const off2=rangeToSrc(info.range,bm2.el,m2);if(!off2){toast('这次选区定位失败，换一段试试');return}
+  try{const r=await fetch('/api/overlays/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nodeId:cur.nodeId,messageId:m2.mid,start:off2.a,end:off2.b})});
+   if(!r.ok)throw new Error((await r.text()).slice(0,100));const d=await r.json();
+   m2.ov=m2.ov.filter(o=>!(o.kind==='style'&&o.start<off2.b&&o.end>off2.a));renderMsgs();toast(d.cleared?('已清除 '+d.cleared+' 处格式'):'所选没有格式')}
+  catch(e){toast('清除失败：'+e.message)}}
  else if(act==='branch'){
   if(!cur||!cur.nodeId){toast('等第一轮落库后再分');return}
   const bm=bubbleMid(info.range);const m=bm&&bm.mid&&findMsg(bm.mid);

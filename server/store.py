@@ -3,6 +3,7 @@
 """SQLite 存储：node / message。D-101/D-103/D-107/D-108 的承载层。"""
 from __future__ import print_function
 
+import json
 import os
 import re
 import sqlite3
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS overlay (
   start      INTEGER NOT NULL,
   end_pos    INTEGER NOT NULL,
   color      TEXT,
+  value      TEXT,
   ref_node   TEXT,
   created_at INTEGER NOT NULL
 );
@@ -72,6 +74,9 @@ def init_db():
         cols = [r[1] for r in conn.execute("PRAGMA table_info(node)")]
         if "deleted" not in cols:  # 老库迁移：删整支用的软删除标
             conn.execute("ALTER TABLE node ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+        ocols = [r[1] for r in conn.execute("PRAGMA table_info(overlay)")]
+        if ocols and "value" not in ocols:  # 老库迁移：style 格式值
+            conn.execute("ALTER TABLE overlay ADD COLUMN value TEXT")
         conn.commit()
     finally:
         conn.close()
@@ -166,14 +171,46 @@ def rename_node(node_id, title):
 
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+_STYLE_KEYS = {"b", "i", "size", "font", "op"}
 
 
-def add_overlay(node_id, message_id, kind, start, end, color, ref_node=None):
-    """标色外挂层（D-103）：start/end = 消息原文字符偏移；原文一字不动。"""
-    if kind not in ("mark", "ul"):
+def _check_style(value):
+    """格式值：JSON 子集，非法即拒。返回规范串。"""
+    try:
+        obj = json.loads(value) if isinstance(value, str) else None
+    except Exception:
+        raise ValueError("value 非法")
+    if not isinstance(obj, dict) or not obj or set(obj) - _STYLE_KEYS:
+        raise ValueError("value 非法")
+    if "b" in obj and obj["b"] not in (True, False, 0, 1):
+        raise ValueError("value 非法")
+    if "i" in obj and obj["i"] not in (True, False, 0, 1):
+        raise ValueError("value 非法")
+    if "size" in obj and obj["size"] not in ("sm", "lg"):
+        raise ValueError("value 非法")
+    if "font" in obj and obj["font"] not in ("song", "kai", "mono"):
+        raise ValueError("value 非法")
+    if "op" in obj and (not isinstance(obj["op"], (int, float))
+                        or isinstance(obj["op"], bool)
+                        or not (30 <= obj["op"] <= 100)):
+        raise ValueError("value 非法")
+    return json.dumps(obj, sort_keys=True)
+
+
+def add_overlay(node_id, message_id, kind, start, end, color, value=None, ref_node=None):
+    """标色/格式外挂层（D-103）：start/end = 消息原文字符偏移；原文一字不动。"""
+    if kind not in ("mark", "ul", "style"):
         raise ValueError("kind 非法")
-    if not _COLOR.match(color or ""):
-        raise ValueError("color 非法")
+    if kind == "style":
+        if value is None:
+            raise ValueError("value 非法")
+        value = _check_style(value)
+        color = None
+    else:
+        if value is not None:
+            raise ValueError("value 非法")
+        if not _COLOR.match(color or ""):
+            raise ValueError("color 非法")
     conn = connect()
     try:
         if not conn.execute("SELECT 1 FROM node WHERE id=? AND deleted=0", (node_id,)).fetchone():
@@ -188,21 +225,42 @@ def add_overlay(node_id, message_id, kind, start, end, color, ref_node=None):
                 or not (0 <= start < end <= size)):
             raise ValueError("偏移越界")
         oid, ts = uid("ov"), now_ms()
-        conn.execute("INSERT INTO overlay(id,node_id,message_id,kind,start,end_pos,color,ref_node,created_at)"
-                     " VALUES(?,?,?,?,?,?,?,?,?)",
-                     (oid, node_id, message_id, kind, start, end, color, ref_node, ts))
+        conn.execute("INSERT INTO overlay(id,node_id,message_id,kind,start,end_pos,color,value,ref_node,created_at)"
+                     " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                     (oid, node_id, message_id, kind, start, end, color, value, ref_node, ts))
         conn.commit()
     finally:
         conn.close()
     return {"id": oid, "node_id": node_id, "message_id": message_id, "kind": kind,
-            "start": start, "end": end, "color": color, "ref_node": ref_node}
+            "start": start, "end": end, "color": color, "value": value, "ref_node": ref_node}
+
+
+def clear_style(node_id, message_id, start, end):
+    """清除选中区间的格式外挂（只动 overlay，不动原文）。返回清掉的行数。"""
+    if (not isinstance(start, int) or not isinstance(end, int)
+            or isinstance(start, bool) or isinstance(end, bool)
+            or not (0 <= start < end)):
+        raise ValueError("偏移越界")
+    conn = connect()
+    try:
+        if not conn.execute("SELECT 1 FROM node WHERE id=? AND deleted=0", (node_id,)).fetchone():
+            raise LookupError("节点不存在")
+        if not conn.execute("SELECT 1 FROM message WHERE id=? AND node_id=?",
+                            (message_id, node_id)).fetchone():
+            raise LookupError("消息不存在")
+        cur = conn.execute("DELETE FROM overlay WHERE node_id=? AND message_id=? AND kind='style'"
+                           " AND start<? AND end_pos>?", (node_id, message_id, end, start))
+        conn.commit()
+        return {"cleared": cur.rowcount}
+    finally:
+        conn.close()
 
 
 def list_overlays(node_id):
     conn = connect()
     try:
         return [dict(r) for r in conn.execute(
-            "SELECT id,node_id,message_id,kind,start,end_pos AS \"end\",color,ref_node,created_at"
+            "SELECT id,node_id,message_id,kind,start,end_pos AS \"end\",color,value,ref_node,created_at"
             " FROM overlay WHERE node_id=? ORDER BY created_at", (node_id,))]
     finally:
         conn.close()

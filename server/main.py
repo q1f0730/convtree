@@ -80,7 +80,15 @@ class OverlayIn(BaseModel):
     start: int
     end: int
     color: str | None = None
+    value: str | None = None
     refNode: str | None = None
+
+
+class ClearIn(BaseModel):
+    nodeId: str
+    messageId: str
+    start: int
+    end: int
 
 
 class NoteIn(BaseModel):
@@ -202,7 +210,18 @@ def post_overlay(body: OverlayIn):
     """标色外挂层落库（D-103 偏移；D-101：只 INSERT，不过原文）。"""
     try:
         return store.add_overlay(body.nodeId, body.messageId, body.kind,
-                                 body.start, body.end, body.color, body.refNode)
+                                 body.start, body.end, body.color, body.value, body.refNode)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/overlays/clear")
+def clear_overlay(body: ClearIn):
+    """清除选中区间的格式外挂（kind='style'；原文不动）。"""
+    try:
+        return store.clear_style(body.nodeId, body.messageId, body.start, body.end)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
     except (ValueError, TypeError) as exc:

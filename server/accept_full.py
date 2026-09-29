@@ -339,6 +339,24 @@ check("mdOv" in INK and "rangeToSrc" in INK and "attachOvs" in INK, "坐标引�
 check("dataset.mid" in INK and "/api/overlays" in INK and "/api/notes" in INK, "落库接线")
 check("readBack" not in INK and "wrapRange" not in INK, "DOM外挂退役")
 check("('tabs').style.display=panels.chat" in INK, "标签跟聊天走")
+r = c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "style", "start": 0, "end": min(4, alen), "value": '{"b":1,"size":"lg"}'})
+check(r.status_code == 200 and json.loads(r.json()["value"]) == {"b": 1, "size": "lg"}, "排版落库")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "style", "start": 0, "end": 1, "value": '{"size":"XXL"}'}).status_code == 400, "坏尺寸400")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "style", "start": 0, "end": 1, "value": '{}'}).status_code == 400, "空格式400")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "style", "start": 0, "end": 1, "value": '{"nope":1}'}).status_code == 400, "坏键400")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "style", "start": 0, "end": 1, "value": '{"op":5}'}).status_code == 400, "坏透明400")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "mark", "start": 0, "end": 1, "color": "#f25555", "value": '{"b":1}'}).status_code == 400, "mark带值400")
+r = c.post("/api/overlays/clear", json={"nodeId": ov_root, "messageId": midA["id"], "start": 0, "end": min(4, alen)})
+check(r.status_code == 200 and r.json()["cleared"] >= 1, "清除格式计数")
+got = c.get("/api/nodes/%s/overlays" % ov_root).json()["overlays"]
+check(not any(o["kind"] == "style" for o in got) and any(o["kind"] == "ul" for o in got), "只清格式不动划线")
+r = c.post("/api/overlays/clear", json={"nodeId": ov_root, "messageId": midA["id"], "start": 0, "end": min(4, alen)})
+check(r.json()["cleared"] == 0, "复清零")
+check(c.post("/api/overlays/clear", json={"nodeId": "nd_nope", "messageId": midA["id"], "start": 0, "end": 1}).status_code == 404, "坏点清除404")
+ctx3 = build_context(ov_root)
+check(ctx3 == [{"role": m["role"], "content": m["content"]} for m in store_mod.list_messages(ov_root)], "排版不进上下文")
+check("showFmtMenu" in INK and 'id="fmtmenu"' in INK, "格式面板")
+check("contenteditable" not in INK, "正文不可编辑")
 check('class="sheet"' in INK and "backdrop-filter" in INK, "设置独立页")
 check("target.id==='drawer'" in INK, "点空白关设置")
 check(len(store_mod.list_messages(del_gr)) == 2, "消息行冻结保留")
@@ -352,6 +370,7 @@ _con = _sq.connect(old_db)
 _con.execute("CREATE TABLE node(id TEXT PRIMARY KEY,parent_id TEXT,title TEXT NOT NULL,anchor_text TEXT,color TEXT,created_at INTEGER NOT NULL)")
 _con.execute("INSERT INTO node VALUES('nd_old',NULL,'老节点',NULL,NULL,1)")
 _con.execute("CREATE TABLE message(id TEXT PRIMARY KEY,node_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL)")
+_con.execute("CREATE TABLE overlay(id TEXT PRIMARY KEY,node_id TEXT,message_id TEXT,kind TEXT,start INTEGER,end_pos INTEGER,color TEXT,ref_node TEXT,created_at INTEGER)")
 _con.commit()
 _con.close()
 _prev = store_mod.DB_PATH
@@ -362,6 +381,10 @@ try:
     cols = [rr[1] for rr in _con.execute("PRAGMA table_info(node)")]
     _con.close()
     check("deleted" in cols, "老库迁移出deleted列")
+    _con2 = _sq.connect(old_db)
+    ocols = [rr[1] for rr in _con2.execute("PRAGMA table_info(overlay)")]
+    _con2.close()
+    check("value" in ocols, "老库迁移出value列")
     check(any(n["id"] == "nd_old" for n in store_mod.list_nodes()), "老数据可读")
 finally:
     store_mod.DB_PATH = _prev
