@@ -17,14 +17,16 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 .ritem:hover{background:#e9eff6}
 .ritem.on{background:var(--card);box-shadow:0 2px 12px rgba(91,138,176,.12);font-weight:600}
 .ritem small{display:block;font-size:11px;opacity:.55;margin-top:3px;font-weight:400}
-#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#main{flex:1;display:flex;min-width:0}
+#center{flex:1;display:flex;flex-direction:column;min-width:0}
+#cv{flex:1;display:flex;min-height:0}
 #tabs{display:flex;gap:2px;padding:16px 24px 0;align-items:flex-end;overflow-x:auto}
 .tab{position:relative;padding:8px 30px 10px 14px;border:0;background:none;font-size:13.5px;cursor:pointer;color:var(--mut);border-bottom:2px solid transparent;font-family:inherit;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .15s}
 .tab.on{color:var(--ink);border-bottom-color:var(--acc);font-weight:600}
 .tab .x{display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--mut);border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-size:13px}
 .tab:hover .x{display:block}
 .tab .x:hover{background:#dde5ee;color:var(--ink)}
-#views{flex:1;display:flex;min-height:0}
+
 #tree{width:0;overflow:hidden;transition:width .2s}
 #tree.open{width:250px;border-right:1px solid var(--line)}
 #tree .hd{padding:18px 18px 8px;font-size:12px;letter-spacing:3px;color:var(--mut)}
@@ -115,9 +117,10 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="roots"></div>
 </div>
 <div id="main">
-<div id="tabs"></div>
-<div id="views">
 <div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div></div>
+<div id="center">
+<div id="tabs"></div>
+<div id="cv">
 <div id="chat">
 <div id="backbar"><button id="backBtn">← 返回上一级</button> <span id="crumb"></span></div>
 <div id="msgs"></div>
@@ -125,7 +128,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="composer" style="display:none"><input id="q2" placeholder="继续问…" style="flex:1;padding:11px 13px;font-size:15px;border:1px solid #ccc;border-radius:10px"><button id="send2" style="padding:0 22px;border-radius:10px;border:0;background:#222;color:#fff;cursor:pointer">发送</button></div>
 </div>
 <div id="notes"></div>
-</div><div id="batchbar"></div></div>
+</div><div id="batchbar"></div></div></div>
 <div id="drawer">
 <h3>设置</h3><div style="font-size:12px;color:var(--mut)">模型接入 · 密钥只存本机</div>
 <label>服务商</label><select id="sProv"></select>
@@ -240,13 +243,13 @@ function curRootId(){if(!cur||!cur.nodeId)return null;const byId={};nodesCache.f
 function renderRoots(all){const R=document.getElementById('roots');R.innerHTML='';
  const rid=curRootId();
  (all||[]).filter(n=>!n.parent_id).forEach(n=>{
-  const open=tabs.find(t=>t.nodeId===n.id);
   const d=document.createElement('div');d.className='ritem'+(n.id===rid?' on':'');
   d.title=n.title;
   const t=document.createElement('div');t.textContent=n.title;d.appendChild(t);
   const s=document.createElement('small');s.textContent=fmtTime(n.created_at);d.appendChild(s);
   d.onclick=()=>{
-   if(open){switchTab(open);return}
+   const op=tabs.find(t=>t.nodeId===n.id);
+   if(op){switchTab(op);return}
    const t={id:++tabSeq,nodeId:n.id,name:n.title,parent:null,color:n.color,msgs:null};
    tabs.push(t);switchTab(t)};
   R.appendChild(d)})}
@@ -436,7 +439,7 @@ document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElemen
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};
 document.getElementById('q2').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send2').click()};
 document.getElementById('backBtn').onclick=()=>{if(cur&&cur.parent)switchTab(cur.parent.tab)};
-document.getElementById('newChat').onclick=()=>{setModule('chat');cur=null;renderTabs();renderMsgs();renderTree();refreshRoots();
+document.getElementById('newChat').onclick=()=>{setModule('chat');tabs.length=0;cur=null;selNodes.clear();syncBatchbar();renderTabs();renderMsgs();renderTree();refreshRoots();
  setTimeout(()=>{const q=document.getElementById('q');q&&q.focus()},50)};
 document.getElementById('setBtn').onclick=()=>document.getElementById('drawer').classList.add('open');
 document.getElementById('sClose').onclick=()=>document.getElementById('drawer').classList.remove('open');
