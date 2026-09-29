@@ -41,6 +41,12 @@ async def _no_store(request, call_next):
 @app.on_event("startup")
 def _startup():
     store.init_db()
+    if os.environ.get("CONVTREE_NO_AUTOBACKUP") != "1":
+        try:
+            from tools import backup as _backup  # D-114：每日首次启动自动备份
+            _backup.auto_backup()
+        except Exception as exc:  # 备份失败不拦启动，只打印（自验失败不留半成品，见 backup.py）
+            print("auto_backup skip/fail: %s" % exc)
 
 
 def build_context(node_id):
