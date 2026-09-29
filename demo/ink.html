@@ -52,7 +52,7 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #treeTog{margin-left:auto;display:flex;gap:4px}
 #treeTog button{border:1px solid var(--line);background:#fff;border-radius:8px;font-size:12px;padding:3px 10px;cursor:pointer;color:var(--mut);font-family:inherit}
 #treeTog button.on{background:var(--acc-soft);color:var(--acc);border-color:var(--acc)}
-#treeGraph{display:block;padding:6px 4px 16px}
+#treeGraph{display:block}
 #treeGraph text{font-size:12px;fill:var(--ink);font-family:inherit}
 #treeGraph .tn{cursor:pointer}
 .tnode{padding:9px 11px;border-radius:10px;cursor:pointer;display:flex;gap:10px;align-items:center;transition:background .15s}
@@ -204,7 +204,11 @@ function openNode(n){if(!n)return;const ensure=(x)=>{let t=tabs.find(y=>y.nodeId
   if(p)t.parent={tab:ensure(p)}}
  switchTab(t)}
 let treeMode='graph';
-let treeZoom=1,suppressClick=false;
+let treeZoom=null,suppressClick=false;
+let fitBase={w:200};
+function fitZoom(){const sc=document.getElementById('treeScroll');const cw=sc?sc.clientWidth:300;
+ return Math.min(1,Math.max(.3,cw/Math.max(1,fitBase.w)))}
+function effZoom(){return treeZoom!=null?treeZoom:fitZoom()}
 let treeWUser=null;
 function treeW(){return treeWUser!=null?treeWUser:(treeMode==='graph'?340:250)}
 function syncTreeWidth(){const t=document.getElementById('tree'),h=document.getElementById('treeResize');
@@ -220,7 +224,7 @@ function renderTree(){
  document.getElementById('treeGraph').style.display=treeMode==='graph'?'block':'none';
  document.getElementById('treeScroll').classList.toggle('dots',treeMode==='graph');
  document.getElementById('treeZoom').style.display=treeMode==='graph'?'flex':'none';
- document.querySelector('#treeZoom button[data-z="reset"]').textContent=Math.round(treeZoom*100)+'%';
+ document.querySelector('#treeZoom button[data-z="reset"]').textContent=Math.round(effZoom()*100)+'%';
  syncTreeWidth();
  if(treeMode==='list')renderTreeList();else renderTreeGraph()}
 function renderTreeList(){const L=document.getElementById('treeList');L.innerHTML='';
@@ -242,12 +246,13 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
  const walk=(pid,depth)=>{(kids[pid]||[]).forEach(n=>{order.push({n,depth});walk(n.id,depth+1)})};walk('',0);
  const LH=46,GAP=26;
  const maxD=order.reduce((a,o)=>Math.max(a,o.depth),0);
- const W=n=>{let w=54;try{w=Math.ceil(_mc.measureText(treeLabel(n)).width)+38}catch(_){w=treeLabel(n).length*12+38}return w};
+ const W=n=>{let w=54;try{w=Math.ceil(_mc.measureText(treeLabel(n)).width)+46}catch(_){w=treeLabel(n).length*12+46}return w};
  let xx=14;const pos={};
  order.forEach(o=>{const w=W(o.n);pos[o.n.id]={x:xx,w:w,depth:o.depth};xx+=w+GAP});
  const Wd=xx-GAP+14,H=maxD*LH+76;
- svg.setAttribute('width',Wd*treeZoom);svg.setAttribute('height',H*treeZoom);
- vp.setAttribute('transform','scale('+treeZoom+')');
+ fitBase={w:Wd};const z=effZoom();
+ svg.setAttribute('width',Wd*z);svg.setAttribute('height',H*z);
+ vp.setAttribute('transform','scale('+z+')');
  const Y=d=>H-30-d*LH;
  const line=d=>{const pa=document.createElementNS(NS,'path');pa.setAttribute('d',d);
   pa.setAttribute('fill','none');pa.setAttribute('stroke','#b9c7d8');pa.setAttribute('stroke-width','1.5');vp.appendChild(pa)};
@@ -567,8 +572,8 @@ document.querySelectorAll('#side button').forEach(b=>b.onclick=(e)=>{
   if(!only){panels.chat=panels.note=panels.tree=false;panels[m]=true}} /* 单击：干净切换 */
  syncPanels()});
 document.querySelectorAll('#treeTog button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();treeMode=b.dataset.v;renderTree()});
-function zoomGraph(f){treeZoom=Math.min(2.5,Math.max(.4,treeZoom*f));renderTree()}
-document.querySelectorAll('#treeZoom button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();const z=b.dataset.z;if(z==='in')zoomGraph(1.2);else if(z==='out')zoomGraph(1/1.2);else{treeZoom=1;renderTree()}});
+function zoomGraph(f){const cur=treeZoom!=null?treeZoom:fitZoom();treeZoom=Math.min(2.5,Math.max(.3,cur*f));renderTree()}
+document.querySelectorAll('#treeZoom button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();const z=b.dataset.z;if(z==='in')zoomGraph(1.2);else if(z==='out')zoomGraph(1/1.2);else{treeZoom=null;renderTree()}});
 function wireGraphPan(){const svg=document.getElementById('treeGraph');const sc=document.getElementById('treeScroll');
  svg.onpointerdown=(e)=>{if(e.pointerType==='mouse'&&e.button!==0)return;svg._pan={x:e.clientX,y:e.clientY,sl:sc.scrollLeft,st:sc.scrollTop,moved:false};svg.classList.add('panning');try{svg.setPointerCapture(e.pointerId)}catch(_){}};
  svg.onpointermove=(e)=>{const p=svg._pan;if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;
@@ -577,7 +582,7 @@ function wireGraphPan(){const svg=document.getElementById('treeGraph');const sc=
  const end=()=>{if(svg._pan&&svg._pan.moved)suppressClick=true;svg._pan=null;svg.classList.remove('panning')};
  svg.onpointerup=end;svg.onpointercancel=end;
  svg.onwheel=(e)=>{e.preventDefault();zoomGraph(Math.exp(-e.deltaY*0.0015))};
- svg.ondblclick=(e)=>{if(e.target.closest&&e.target.closest('.tn'))return;treeZoom=1;renderTree()}}
+ svg.ondblclick=(e)=>{if(e.target.closest&&e.target.closest('.tn'))return;treeZoom=null;renderTree()}}
 wireGraphPan();
 function wireTreeResize(){const h=document.getElementById('treeResize');if(!h||h._wired)return;h._wired=true;
  h.onpointerdown=(e)=>{e.stopPropagation();e.preventDefault();h._st={x:e.clientX,w:treeW()};document.getElementById('tree').style.transition='none';try{h.setPointerCapture(e.pointerId)}catch(_){}};
@@ -585,6 +590,9 @@ function wireTreeResize(){const h=document.getElementById('treeResize');if(!h||h
  const end=()=>{h._st=null;document.getElementById('tree').style.transition=''};h.onpointerup=end;h.onpointercancel=end;
  h.ondblclick=()=>{treeWUser=null;syncTreeWidth()}}
 wireTreeResize();
+function wireFitRO(){const sc=document.getElementById('treeScroll');if(!sc||sc._fitRO)return;sc._fitRO=true;
+ new ResizeObserver(()=>{if(treeZoom==null&&treeMode==='graph')renderTree()}).observe(sc)}
+wireFitRO();
 const selNodes=new Set();
 function toggleSel(id){if(selNodes.has(id))selNodes.delete(id);else selNodes.add(id);syncBatchbar();renderTree()}
 function subtreeIds(id){const kids=treeKids();const out=[];const walk=(x)=>{out.push(x);(kids[x]||[]).forEach(y=>walk(y.id))};walk(id);return out}
