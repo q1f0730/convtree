@@ -432,6 +432,8 @@ v = c.get("/api/version").json()
 check(v.get("build"), "版本端点")
 check('id="buildTag"' in INK, "构建号水印")
 check("已开新对话" in INK, "新对话反馈")
+check("addEventListener('resize'" in INK, "窗口缩放重钳")
+check('title="收起/展开对话树"' in INK, "收起提示")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
