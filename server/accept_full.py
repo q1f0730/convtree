@@ -257,6 +257,9 @@ check(c.post("/api/nodes/nd_nope/suggest-title").status_code in (400, 404), "坏
 check('id="clist"' in INK and "新对话" in INK, "主对话列表")
 check("syncPanels" in INK and "panels[" in INK, "多栏独立开关")
 check("至少留一栏" in INK, "防全关白屏")
+check("nodesCache.length" in INK and "walk('',0)" in INK, "树画全量节点")
+check("function openNode" in INK, "树点击开节点")
+check("nodesCache=n.nodes" in INK and "const root=nodesCache.find" in INK, "boot只开一个根")
 check("location.reload" not in INK, "删空不刷新")
 check("refreshRoots" in INK, "根列表刷新")
 
