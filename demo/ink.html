@@ -703,17 +703,18 @@ function treeMenuConfirm(n,which){const M=document.getElementById('treemenu');M.
  const go=document.createElement('button');go.className='go';go.textContent='确认删除';go.onclick=()=>doDelete(ids);row.appendChild(go);
  const back=document.createElement('button');back.textContent='取消';back.onclick=hideTreeMenu;row.appendChild(back);
  c.appendChild(row);M.appendChild(c)}
-async function doDelete(ids){hideTreeMenu();
+async function doDelete(ids){if(doDelete.busy){toast('删除进行中，稍等');return}hideTreeMenu();
  const tops=topsOf(ids).filter(id=>nodesCache.find(n=>n.id===id));
  if(!tops.length){toast('所选已不在树上');return}
+ doDelete.busy=true;
  const del=new Set();let fails=0;
  for(const id of tops){try{const r=await fetch('/api/nodes/'+id+'/delete',{method:'POST'});
   if(!r.ok)throw new Error((await r.text()).slice(0,100));
   (await r.json()).deleted.forEach(x=>del.add(x))}catch(e){fails++;toast('删除失败：'+e.message)}}
- if(!del.size)return;
+ if(!del.size){doDelete.busy=false;return}
  nodesCache=nodesCache.filter(n=>!del.has(n.id));
  selNodes.clear();syncBatchbar();closeTabsByIds(del);renderTree();refreshRoots();
- toast(fails?('删了 '+del.size+' 个节点，'+fails+' 支失败'):('已删除 '+del.size+' 个节点'))}
+ toast(fails?('删了 '+del.size+' 个节点，'+fails+' 支失败'):('已删除 '+del.size+' 个节点'));doDelete.busy=false}
 function closeTabsByIds(set){let ch=false;for(let i=tabs.length-1;i>=0;i--){if(set.has(tabs[i].nodeId)){tabs.splice(i,1);ch=true}}
  if(!ch)return;
  if(!cur||set.has(cur.nodeId)){cur=tabs.length?tabs[tabs.length-1]:null}
