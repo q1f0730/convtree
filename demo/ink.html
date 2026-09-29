@@ -72,8 +72,8 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #backbar button{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:6px 16px;cursor:pointer;font-family:inherit;color:var(--ink);box-shadow:0 2px 8px rgba(91,138,176,.08)}
 #backbar button:hover{border-color:var(--acc);color:var(--acc)}
 #msgs{flex:1;overflow-y:auto;padding:24px 20px;display:flex;flex-direction:column;gap:16px;max-width:700px;width:100%;margin:0 auto}
-.msg-u{align-self:flex-end;background:var(--acc);color:#fff;border-radius:18px 18px 6px 18px;padding:10px 16px;max-width:76%;font-size:15px;box-shadow:0 4px 16px rgba(91,138,176,.25);animation:up .35s ease}
-.msg-a{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-radius:6px 18px 18px 18px;padding:14px 18px;max-width:92%;font-size:15.5px;line-height:2.1;box-shadow:0 6px 28px rgba(91,138,176,.09);animation:up .35s ease}
+.msg-u{overflow-wrap:anywhere;align-self:flex-end;background:var(--acc);color:#fff;border-radius:18px 18px 6px 18px;padding:10px 16px;max-width:76%;font-size:15px;box-shadow:0 4px 16px rgba(91,138,176,.25);animation:up .35s ease}
+.msg-a{overflow-wrap:anywhere;align-self:flex-start;background:var(--card);border:1px solid var(--line);border-radius:6px 18px 18px 18px;padding:14px 18px;max-width:92%;font-size:15.5px;line-height:2.1;box-shadow:0 6px 28px rgba(91,138,176,.09);animation:up .35s ease}
 @keyframes up{from{opacity:0;transform:translateY(10px)}to{opacity:1}}
 .thinking{display:inline-flex;gap:7px;align-items:center;padding:8px 2px}
 .thinking span{width:8px;height:8px;border-radius:50%;background:var(--acc);opacity:.35;animation:think 1.2s infinite ease-in-out}
@@ -258,7 +258,7 @@ function renderTree(){
  const sc0=document.getElementById('treeScope');
  if(rid0){const rn=nodesCache.find(x=>x.id===rid0);sc0.textContent=rn?(' · '+rn.title):'';sc0.title=rn?rn.title:''}else{sc0.textContent='';sc0.title=''}
  if(treeMode==='list')renderTreeList();else renderTreeGraph()}
-function renderTreeList(){const L=document.getElementById('treeList');L.innerHTML='';
+function renderTreeList(){const L=document.getElementById('treeList');const st=L.scrollTop;L.innerHTML='';
  const vis=visibleNodes();
  if(!vis.length){const e=document.createElement('div');e.style.cssText='padding:8px 11px;font-size:13px;color:var(--mut)';e.textContent='还没有对话';L.appendChild(e);return}
  const kids={};vis.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});
@@ -270,7 +270,7 @@ function renderTreeList(){const L=document.getElementById('treeList');L.innerHTM
    d.onclick=(e)=>{if(e.ctrlKey||e.metaKey)toggleSel(n.id);else openNode(n)};
    d.oncontextmenu=(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,n)};
    L.appendChild(d);walk(n.id,depth+1)})};
- walk('',0)}
+ walk('',0);L.scrollTop=st}
 function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=document.getElementById('treeGraph');svg.innerHTML='';
  const vp=document.createElementNS(NS,'g');vp.setAttribute('id','vp');svg.appendChild(vp);
  const vis=visibleNodes();
@@ -355,7 +355,7 @@ function refreshRoots(){fetch('/api/nodes').then(r=>r.json()).then(d=>{nodesCach
 function fmtTime(ms){const d=new Date(ms);const p=n=>String(n).padStart(2,'0');return (d.getMonth()+1)+'-'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function curRootId(){if(!cur||!cur.nodeId)return null;const byId={};nodesCache.forEach(n=>byId[n.id]=n);
  let id=cur.nodeId,guard=0;while(byId[id]&&byId[id].parent_id&&guard++<50)id=byId[id].parent_id;return id}
-function renderRoots(all){const R=document.getElementById('roots');R.innerHTML='';
+function renderRoots(all){const R=document.getElementById('roots');const st=R.scrollTop;R.innerHTML='';
  const rid=curRootId();
  (all||[]).filter(n=>!n.parent_id).forEach(n=>{
   const d=document.createElement('div');d.className='ritem'+(n.id===rid?' on':'');
@@ -368,7 +368,7 @@ function renderRoots(all){const R=document.getElementById('roots');R.innerHTML='
    const t={id:++tabSeq,nodeId:n.id,name:n.title,parent:null,color:n.color,msgs:null};
    tabs.push(t);switchTab(t)};
   d.oncontextmenu=(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,n)};
-  R.appendChild(d)})}
+  R.appendChild(d)});R.scrollTop=st}
 function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  const bb=document.getElementById('backbar');
  const started=cur&&cur.msgs&&cur.msgs.length>0;
@@ -612,12 +612,12 @@ async function addNote(txt){try{const r=await fetch('/api/notes',{method:'POST',
  if(!r.ok)throw new Error((await r.text()).slice(0,100));const n=await r.json();
  notes.unshift({id:n.id,text:n.text,time:fmtTime(n.created_at),from:n.from_name||'?',nodeId:n.from_node||null});paintNotes()}catch(e){toast('记笔记失败：'+e.message)}}
 function renderNotes(){paintNotes();loadNotes().then(paintNotes)}
-function paintNotes(){const N=document.getElementById('notes');N.innerHTML='';
+function paintNotes(){const N=document.getElementById('notes');const st=N.scrollTop;N.innerHTML='';
  const b=document.createElement('button');b.textContent='随便看看';b.style.cssText='align-self:flex-end;border:1px solid #ccc;background:#fff;border-radius:8px;padding:6px 14px;cursor:pointer';
  b.onclick=()=>{if(!notes.length){toast('笔记本还是空的');return}
   const n=notes[Math.floor(Math.random()*notes.length)];N.prepend(card(n));toast('随机回顾')};
  N.appendChild(b);
- notes.forEach(n=>N.appendChild(card(n)))}
+ notes.forEach(n=>N.appendChild(card(n)));N.scrollTop=st}
 function card(n){const d=document.createElement('div');d.className='ncard';
  const hr1=document.createElement('hr'),hr2=document.createElement('hr');
  const p=document.createElement('div');p.innerHTML=md(n.text);
