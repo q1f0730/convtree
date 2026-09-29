@@ -532,7 +532,7 @@ function showFmtMenu(){resetFmt();const M=document.getElementById('fmtmenu');M.i
  const clr=document.createElement('button');clr.className='ghost';clr.textContent='清除格式';clr.onclick=()=>{hideFmtMenu();const info2=M._info;if(info2)textAct('clearfmt',info2)};act.appendChild(clr);
  M.appendChild(act);M._info=document.getElementById('menu')._info;M.style.display='block'}
 document.getElementById('fmtmenu').addEventListener('click',e=>e.stopPropagation());
-document.addEventListener('click',e=>{if(!e.target.closest('#fmtmenu'))hideFmtMenu()});
+document.addEventListener('click',e=>{if(!e.target.closest('#fmtmenu')&&!e.target.closest('#menu'))hideFmtMenu()});
 async function openRef(id){let n=nodesCache.find(x=>x.id===id);
  if(!n){try{const d=await (await fetch('/api/nodes')).json();nodesCache=d.nodes||[];renderRoots(nodesCache);renderTree();n=nodesCache.find(x=>x.id===id)}catch(_){}}
  if(n)openNode(n);else toast('分支不在了（可能已删）')}

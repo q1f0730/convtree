@@ -356,6 +356,7 @@ check(c.post("/api/overlays/clear", json={"nodeId": "nd_nope", "messageId": midA
 ctx3 = build_context(ov_root)
 check(ctx3 == [{"role": m["role"], "content": m["content"]} for m in store_mod.list_messages(ov_root)], "排版不进上下文")
 check("showFmtMenu" in INK and 'id="fmtmenu"' in INK, "格式面板")
+check("closest('#menu')" in INK, "面板防冒泡误关")
 check("contenteditable" not in INK, "正文不可编辑")
 check("treeZoom" in INK and "radial-gradient" in INK, "导图缩放点阵")
 check("scrollLeft" in INK and "dblclick" in INK, "拖动与复位")
