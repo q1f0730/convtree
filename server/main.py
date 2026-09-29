@@ -133,7 +133,17 @@ def suggest_title(node_id: str):
     """AI 总结分支名：取首个 user 问题浓缩≤12 字；未配模型/失败→截断回落。"""
     msgs = [m for m in store.list_messages(node_id) if m["role"] == "user"]
     if not msgs:
-        raise HTTPException(400, "尚无提问")
+        path = store.node_path(node_id)
+        if not path:
+            raise HTTPException(404, "节点不存在")
+        anchor = path[-1].get("anchor_text") or ""
+        if not anchor:
+            raise HTTPException(400, "尚无提问")
+        title = anchor[:16]
+        try:
+            return store.rename_node(node_id, title)
+        except (LookupError, ValueError) as exc:
+            raise HTTPException(404 if isinstance(exc, LookupError) else 400, str(exc))
     q = msgs[0]["content"]
     try:
         text, _ = llm.chat_sync([
@@ -201,7 +211,9 @@ async def chat(body: ChatIn):
                 await asyncio.sleep(0.02)
             await q.put(("done", {"nodeId": node_id, "messageId": mid["id"]}))
         except Exception as exc:
-            mid = store.add_message(node_id, "assistant", "（生成失败：%s）" % exc)
+            err = "（生成失败：%s）" % exc
+            mid = store.add_message(node_id, "assistant", err)
+            await q.put(("delta", err))
             await q.put(("done", {"nodeId": node_id, "messageId": mid["id"], "error": True}))
         await q.put(None)
 

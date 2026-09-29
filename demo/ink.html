@@ -29,6 +29,14 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #tree.open{width:250px;border-right:1px solid var(--line)}
 #tree .hd{padding:18px 18px 8px;font-size:12px;letter-spacing:3px;color:var(--mut)}
 #treeList{padding:4px 12px;font-size:14px}
+#tree.open.wide{width:340px}
+#tree .hd{display:flex;align-items:center;gap:8px}
+#treeTog{margin-left:auto;display:flex;gap:4px}
+#treeTog button{border:1px solid var(--line);background:#fff;border-radius:8px;font-size:12px;padding:3px 10px;cursor:pointer;color:var(--mut);font-family:inherit}
+#treeTog button.on{background:var(--acc-soft);color:var(--acc);border-color:var(--acc)}
+#treeGraph{display:block;padding:6px 4px 16px}
+#treeGraph text{font-size:12px;fill:var(--ink);font-family:inherit}
+#treeGraph .tn{cursor:pointer}
 .tnode{padding:9px 11px;border-radius:10px;cursor:pointer;display:flex;gap:10px;align-items:center;transition:background .15s}
 .tnode:hover{background:#e9eff6}.tnode.on{background:var(--acc-soft)}
 .dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -84,7 +92,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="main">
 <div id="tabs"></div>
 <div id="views">
-<div id="tree"><div class="hd">树（点击跳转）</div><div id="treeList"></div></div>
+<div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span></div><div id="treeList"></div><svg id="treeGraph" style="display:none"></svg></div>
 <div id="chat">
 <div id="backbar"><button id="backBtn">← 返回上一级</button> <span id="crumb"></span></div>
 <div id="msgs"></div>
@@ -123,8 +131,8 @@ function renderTabs(){const bar=document.getElementById('tabs');bar.innerHTML=''
   d.oncontextmenu=(e)=>{e.preventDefault();startRename(d,t)};
   d.onauxclick=(e)=>{if(e.button===1){closeTab(t)}};bar.appendChild(d)})}
 function closeTab(t){const i=tabs.indexOf(t);if(i<0)return;tabs.splice(i,1);
- if(!tabs.length){cur=null;renderTabs();renderMsgs();renderTree();return}
- cur=tabs[Math.max(0,i-1)];renderTabs();switchTabMsgs(cur);renderTree()}
+ if(!tabs.length){cur=null;renderTabs();renderMsgs();renderTree();refreshRoots();return}
+ cur=tabs[Math.max(0,i-1)];switchTab(cur)}
 function switchTabMsgs(t){if(t.msgs===null){fetch('/api/nodes/'+t.nodeId+'/messages').then(r=>r.json()).then(d=>{
    t.msgs=(d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content}));renderMsgs()}).catch(()=>{t.msgs=[];renderMsgs()});return}
  renderMsgs()}
@@ -135,9 +143,17 @@ function openNode(n){const ensure=(x)=>{let t=tabs.find(y=>y.nodeId===x.id);
  if(n.parent_id){const p=nodesCache.find(x=>x.id===n.parent_id);
   if(p)t.parent={tab:ensure(p)}}
  switchTab(t)}
-function renderTree(){const L=document.getElementById('treeList');L.innerHTML='';
+let treeMode='graph';
+function treeKids(){const kids={};nodesCache.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});return kids}
+function renderTree(){
+ document.querySelectorAll('#treeTog button').forEach(b=>b.classList.toggle('on',b.dataset.v===treeMode));
+ document.getElementById('tree').classList.toggle('wide',treeMode==='graph');
+ document.getElementById('treeList').style.display=treeMode==='list'?'block':'none';
+ document.getElementById('treeGraph').style.display=treeMode==='graph'?'block':'none';
+ if(treeMode==='list')renderTreeList();else renderTreeGraph()}
+function renderTreeList(){const L=document.getElementById('treeList');L.innerHTML='';
  if(!nodesCache.length){const e=document.createElement('div');e.style.cssText='padding:8px 11px;font-size:13px;color:var(--mut)';e.textContent='还没有对话';L.appendChild(e);return}
- const kids={};nodesCache.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});
+ const kids=treeKids();
  const walk=(pid,depth)=>{(kids[pid]||[]).forEach(n=>{
    const d=document.createElement('div');d.className='tnode'+(cur&&cur.nodeId===n.id?' on':'');
    d.style.paddingLeft=(11+depth*16)+'px';
@@ -145,6 +161,33 @@ function renderTree(){const L=document.getElementById('treeList');L.innerHTML=''
    d.firstChild.style.background=n.color||'#c9d3e0';d.lastChild.textContent=n.title;
    d.onclick=()=>openNode(n);L.appendChild(d);walk(n.id,depth+1)})};
  walk('',0)}
+function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=document.getElementById('treeGraph');svg.innerHTML='';
+ if(!nodesCache.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';svg.appendChild(t);svg.setAttribute('height',40);return}
+ const kids=treeKids();const order=[];
+ const walk=(pid,depth)=>{(kids[pid]||[]).forEach(n=>{order.push({n,depth});walk(n.id,depth+1)})};walk('',0);
+ const RH=34,W=104,BW=96;
+ const maxD=order.reduce((a,o)=>Math.max(a,o.depth),0);
+ const H=order.length*RH+16,Wd=maxD*W+BW+28;
+ svg.setAttribute('width',Wd);svg.setAttribute('height',H);
+ const pos={};order.forEach((o,i)=>pos[o.n.id]={x:14+o.depth*W,y:i*RH+24});
+ order.forEach(o=>{if(!o.n.parent_id||!pos[o.n.parent_id])return;
+  const p=pos[o.n.parent_id],c=pos[o.n.id];const x1=p.x+BW,mx=(x1+c.x)/2;
+  const pa=document.createElementNS(NS,'path');
+  pa.setAttribute('d','M '+x1+' '+p.y+' H '+mx+' V '+c.y+' H '+c.x);
+  pa.setAttribute('fill','none');pa.setAttribute('stroke','#b9c7d8');pa.setAttribute('stroke-width','1.5');
+  svg.appendChild(pa)});
+ order.forEach(o=>{const c=pos[o.n.id];const on=cur&&cur.nodeId===o.n.id;
+  const g=document.createElementNS(NS,'g');g.setAttribute('class','tn');
+  const rc=document.createElementNS(NS,'rect');
+  rc.setAttribute('x',c.x);rc.setAttribute('y',c.y-12);rc.setAttribute('width',BW);rc.setAttribute('height',24);rc.setAttribute('rx',8);
+  rc.setAttribute('fill',on?'#e3edf5':'#ffffff');rc.setAttribute('stroke',on?'#5b8ab0':(o.n.color||'#c9d3e0'));rc.setAttribute('stroke-width',on?'2':'1.2');
+  g.appendChild(rc);
+  const dt=document.createElementNS(NS,'circle');dt.setAttribute('cx',c.x+11);dt.setAttribute('cy',c.y);dt.setAttribute('r',4);
+  dt.setAttribute('fill',o.n.color||'#c9d3e0');g.appendChild(dt);
+  const tx=document.createElementNS(NS,'text');tx.setAttribute('x',c.x+20);tx.setAttribute('y',c.y+4);
+  tx.textContent=o.n.title.length>7?o.n.title.slice(0,7)+'…':o.n.title;
+  const ti=document.createElementNS(NS,'title');ti.textContent=o.n.title;tx.appendChild(ti);g.appendChild(tx);
+  g.addEventListener('click',()=>openNode(o.n));svg.appendChild(g)})}
 function startRename(d,t){if(d.querySelector('input'))return;
  const inp=document.createElement('input');inp.value=t.name;
  inp.style.cssText='width:110px;font:inherit;background:#fff;border:1px solid var(--acc);border-radius:4px;padding:1px 4px';
@@ -153,17 +196,20 @@ function startRename(d,t){if(d.querySelector('input'))return;
   if(ok&&inp.value.trim())renameTab(t,inp.value.trim());else{renderTabs();renderTree()}};
  inp.onkeydown=(e)=>{if(e.key==='Enter')commit(true);else if(e.key==='Escape')commit(false);e.stopPropagation()};
  inp.onblur=()=>commit(true);inp.onclick=(e)=>e.stopPropagation()}
-async function renameTab(t,name){if(!t.nodeId){t.name=name;renderTabs();renderTree();return}
+async function renameTab(t,name){t.userNamed=true;if(!t.nodeId){t.name=name;renderTabs();renderTree();return}
  try{const r=await fetch('/api/nodes/'+t.nodeId+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name})});
   if(!r.ok)throw new Error((await r.text()).slice(0,120));t.name=name;renderTabs();renderTree()}
  catch(e){toast('改名失败：'+e.message)}}
 function switchTab(t){cur=t;renderTabs();renderTree();refreshRoots();switchTabMsgs(t)}
 function refreshRoots(){fetch('/api/nodes').then(r=>r.json()).then(d=>{nodesCache=d.nodes||[];renderRoots(nodesCache);renderTree()}).catch(()=>{})}
 function fmtTime(ms){const d=new Date(ms);const p=n=>String(n).padStart(2,'0');return (d.getMonth()+1)+'-'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes())}
+function curRootId(){if(!cur||!cur.nodeId)return null;const byId={};nodesCache.forEach(n=>byId[n.id]=n);
+ let id=cur.nodeId,guard=0;while(byId[id]&&byId[id].parent_id&&guard++<50)id=byId[id].parent_id;return id}
 function renderRoots(all){const R=document.getElementById('roots');R.innerHTML='';
+ const rid=curRootId();
  (all||[]).filter(n=>!n.parent_id).forEach(n=>{
   const open=tabs.find(t=>t.nodeId===n.id);
-  const d=document.createElement('div');d.className='ritem'+(open&&open===cur?' on':'');
+  const d=document.createElement('div');d.className='ritem'+(n.id===rid?' on':'');
   d.title=n.title;
   const t=document.createElement('div');t.textContent=n.title;d.appendChild(t);
   const s=document.createElement('small');s.textContent=fmtTime(n.created_at);d.appendChild(s);
@@ -215,17 +261,21 @@ async function send(text){text=(text||'').trim();if(!text)return;
  catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';return}
  if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);return}
  const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null;
+ try{
  for(;;){const r=await rd.read();if(r.done)break;buf+=dec.decode(r.value,{stream:true});
   const parts=buf.split('\n\n');buf=parts.pop();
   for(const p of parts){const m=p.match(/^event: (\w+)\ndata: ([\s\S]*)$/);if(!m)continue;
    let d;try{d=JSON.parse(m[2])}catch(_){continue}
    if(m[1]==='delta'){full+=d.text;ab.innerHTML=md(full);M.scrollTop=M.scrollHeight}
    else if(m[1]==='done'){doneId=d.nodeId}}}
+ }catch(e){ab.textContent='（读取中断：'+e.message+'，本轮已落库，切出去再回来可看）';
+  cur.msgs.push({role:'a',text:ab.textContent});renderTree();refreshRoots();return}
  if(doneId)cur.nodeId=doneId;
+ if(!full){full=ab.textContent&&ab.textContent!=='…'?ab.textContent:'（空回复：模型什么都没返回）';ab.innerHTML=md(full)}
  cur.msgs.push({role:'a',text:full});
  if(first){cur.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
   fetch('/api/nodes/'+cur.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
-   if(d&&d.title&&cur.name!==d.title&&(cur.name.endsWith('…')||cur.name==='未命名')){cur.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}
+   if(d&&d.title&&!cur.userNamed){cur.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}
  renderTree();refreshRoots()}
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
@@ -256,8 +306,11 @@ async function textAct(act,info){
   catch(e){toast('分支失败：'+e.message);return}
   try{wrapRange(info.range,'mark',{color:c})}catch(_){}
   cur.msgs=readBack();
-  const nt={id:++tabSeq,nodeId:node.id,name:'未命名',parent:{tab:cur},color:c,msgs:[]};
-  tabs.push(nt);switchTab(nt);refreshRoots();toast('已分支出去')}}
+  const nt={id:++tabSeq,nodeId:node.id,name:txt.slice(0,12)+(txt.length>12?'…':''),parent:{tab:cur},color:c,msgs:[]};
+  tabs.push(nt);switchTab(nt);refreshRoots();
+  fetch('/api/nodes/'+node.id+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
+   if(d&&d.title&&!nt.userNamed){nt.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{});
+  toast('已分支出去')}}
 function wrapRange(range,tag,opt){const el=document.createElement(tag==='mark'?'mark':'u');
  if(tag==='mark'){el.className='hl';el.style.setProperty('--mk',opt.color+'55')}
  else{el.className='uln';el.style.textDecorationColor=opt.color}
@@ -295,6 +348,7 @@ document.querySelectorAll('#side button').forEach(b=>b.onclick=()=>{
  const on=Object.values(panels).some(Boolean);
  if(!on)panels[b.dataset.m]=true; /* 至少留一栏，防全关白屏 */
  syncPanels()});
+document.querySelectorAll('#treeTog button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();treeMode=b.dataset.v;renderTree()});
 document.getElementById('send').onclick=()=>{send(document.getElementById('q').value);document.getElementById('q').value=''};
 document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};

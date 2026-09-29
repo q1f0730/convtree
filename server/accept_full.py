@@ -249,7 +249,8 @@ check('charset="utf-8"' in INK or "charset=utf-8" in INK, "utf8声明")
 check("sClose" in INK, "抽屉有关闭")
 r = c.post("/api/branch", json={"parentId": root, "anchorText": "总结 Sebastian"})
 sn = r.json()["node"]["id"]
-check(c.post("/api/nodes/%s/suggest-title" % sn).status_code == 400, "无问题400")
+r = c.post("/api/nodes/%s/suggest-title" % sn)
+check(r.status_code == 200 and r.json()["title"] == "总结 Sebastian", "空分支先吃锚")
 c.post("/api/chat", json={"nodeId": sn, "text": "总结测试问题很长很长很长很长"})
 r = c.post("/api/nodes/%s/suggest-title" % sn)
 check(r.status_code == 200 and 0 < len(r.json()["title"]) <= 16, "AI总结≤16字")
@@ -257,11 +258,32 @@ check(c.post("/api/nodes/nd_nope/suggest-title").status_code in (400, 404), "坏
 check('id="clist"' in INK and "新对话" in INK, "主对话列表")
 check("syncPanels" in INK and "panels[" in INK, "多栏独立开关")
 check("至少留一栏" in INK, "防全关白屏")
+r = c.post("/api/branch", json={"parentId": root, "anchorText": "锚定标题xyz"})
+an = r.json()["node"]["id"]
+r = c.post("/api/nodes/%s/suggest-title" % an)
+check(r.status_code == 200 and r.json()["title"] == "锚定标题xyz", "空分支吃锚文本")
+check("userNamed" in INK, "手动改名优先AI")
 check("nodesCache.length" in INK and "walk('',0)" in INK, "树画全量节点")
 check("function openNode" in INK, "树点击开节点")
 check("nodesCache=n.nodes" in INK and "const root=nodesCache.find" in INK, "boot只开一个根")
 check("location.reload" not in INK, "删空不刷新")
 check("refreshRoots" in INK, "根列表刷新")
+check("treeMode" in INK and 'data-v="graph"' in INK and 'data-v="list"' in INK, "导图大纲切换")
+check("renderTreeGraph" in INK and "renderTreeList" in INK, "双视图函数")
+check("treeMode='graph'" in INK or 'treeMode="graph"' in INK, "默认导图")
+check("createElementNS" in INK and "treeGraph" in INK, "SVG图谱")
+check("curRootId" in INK, "分支高亮溯根")
+check("读取中断" in INK and "空回复" in INK, "流式失败显错")
+check("await q.put((\"delta\", err))" in MAIN_SRC, "失败也发delta")
+_real_chat = llm_mod.chat_sync
+def _boom(messages):
+    raise RuntimeError("boom-test")
+llm_mod.chat_sync = _boom
+r = c.post("/api/chat", json={"text": "触发失败路径"})
+llm_mod.chat_sync = _real_chat
+check(r.status_code == 200 and "生成失败" in r.text, "失败落库且可见")
+d = sse_done(r.text)
+check(bool(d and d.get("error") is True), "失败带error标")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
