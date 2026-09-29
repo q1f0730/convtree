@@ -339,6 +339,8 @@ check("caret" in INK and "@keyframes blink" in INK, "流式光标")
 check('id="center"' in INK and INK.index('id="tree"') < INK.index('id="center"') < INK.index('id="tabs"') < INK.index('id="chat"'), "标签只在聊天上")
 check("tabs.length=0;cur=null" in INK, "新对话全新页")
 check("const open=tabs.find" not in INK, "侧栏无过期标签引用")
+check("<svg" in INK and "viewBox" in INK, "简约线性图标")
+check(not any(e in INK for e in ["💬", "📝", "🌳", "⚙"]), "无emoji图标")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
