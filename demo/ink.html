@@ -543,11 +543,13 @@ function syncPanels(){document.querySelectorAll('#side button[data-m]').forEach(
  document.getElementById('tree').classList.toggle('open',panels.tree);
  if(panels.note)renderNotes();if(panels.tree)renderTree()}
 function setModule(m){if(m)panels[m]=true;syncPanels()}
-document.querySelectorAll('#side button').forEach(b=>b.onclick=()=>{
+document.querySelectorAll('#side button').forEach(b=>b.onclick=(e)=>{
  if(!b.dataset.m)return;
- panels[b.dataset.m]=!panels[b.dataset.m];
- const on=Object.values(panels).some(Boolean);
- if(!on)panels[b.dataset.m]=true; /* 至少留一栏，防全关白屏 */
+ const m=b.dataset.m;
+ if(e.ctrlKey||e.metaKey){panels[m]=!panels[m]; /* ctrl+点：叠加并开 */
+  if(!Object.values(panels).some(Boolean))panels[m]=true}
+ else{const only=panels[m]&&!Object.keys(panels).some(k=>k!==m&&panels[k]);
+  if(!only){panels.chat=panels.note=panels.tree=false;panels[m]=true}} /* 单击：干净切换 */
  syncPanels()});
 document.querySelectorAll('#treeTog button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();treeMode=b.dataset.v;renderTree()});
 function zoomGraph(f){treeZoom=Math.min(2.5,Math.max(.4,treeZoom*f));renderTree()}
