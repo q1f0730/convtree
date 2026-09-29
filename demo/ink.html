@@ -227,7 +227,7 @@ function syncTreeWidth(){const t=document.getElementById('tree'),h=document.getE
  t.style.width=Math.min(treeW(),treeMaxW())+'px';h.style.display='block'}
 const _mc=document.createElement('canvas').getContext('2d');_mc.font='12px system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 const NODE_W=120,NODE_H=90;
-function treeLines(title,maxW){const s=String(title==null?'':title);
+function treeLines(title,maxW){const s=String(title==null?'':title).replace(/[\r\n]+/g,' ');
  const fits=t=>{try{return _mc.measureText(t).width<=maxW}catch(_){return t.length*12<=maxW}};
  let i=0,l1='',l2='';
  while(i<s.length&&fits(l1+s[i]))l1+=s[i++];
@@ -724,7 +724,13 @@ document.getElementById('send').onclick=()=>{send(document.getElementById('q').v
 document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};
 document.getElementById('q2').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send2').click()};
-document.getElementById('backBtn').onclick=()=>{if(cur&&cur.parent)switchTab(cur.parent.tab)};
+document.getElementById('backBtn').onclick=()=>{if(!cur)return;
+ const pt=cur.parent?cur.parent.tab:null;
+ if(pt&&tabs.includes(pt)){switchTab(pt);return}
+ const me=nodesCache.find(x=>x.id===(cur&&cur.nodeId));
+ const pid=me&&me.parent_id;
+ if(pid){const n=nodesCache.find(x=>x.id===pid);if(n){openNode(n);return}}
+ if(pt)switchTab(pt)};
 document.getElementById('newChat').onclick=()=>{setModule('chat');tabs.length=0;cur=null;selNodes.clear();syncBatchbar();renderTabs();renderMsgs();renderTree();refreshRoots();toast('已开新对话');
  setTimeout(()=>{const q=document.getElementById('q');q&&q.focus()},50)};
 document.getElementById('setBtn').onclick=()=>document.getElementById('drawer').classList.add('open');
