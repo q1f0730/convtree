@@ -62,9 +62,9 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #backbar{display:none;padding:12px 32px;font-size:13px;color:var(--mut)}
 #backbar button{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:6px 16px;cursor:pointer;font-family:inherit;color:var(--ink);box-shadow:0 2px 8px rgba(91,138,176,.08)}
 #backbar button:hover{border-color:var(--acc);color:var(--acc)}
-#msgs{flex:1;overflow-y:auto;padding:36px 32px;display:flex;flex-direction:column;gap:22px;max-width:700px;width:100%;margin:0 auto}
-.msg-u{align-self:flex-end;background:var(--acc);color:#fff;border-radius:18px 18px 6px 18px;padding:11px 20px;max-width:76%;font-size:15px;box-shadow:0 4px 16px rgba(91,138,176,.25);animation:up .35s ease}
-.msg-a{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-radius:6px 18px 18px 18px;padding:18px 24px;max-width:92%;font-size:15.5px;line-height:2.1;box-shadow:0 6px 28px rgba(91,138,176,.09);animation:up .35s ease}
+#msgs{flex:1;overflow-y:auto;padding:24px 20px;display:flex;flex-direction:column;gap:16px;max-width:700px;width:100%;margin:0 auto}
+.msg-u{align-self:flex-end;background:var(--acc);color:#fff;border-radius:18px 18px 6px 18px;padding:10px 16px;max-width:76%;font-size:15px;box-shadow:0 4px 16px rgba(91,138,176,.25);animation:up .35s ease}
+.msg-a{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-radius:6px 18px 18px 18px;padding:14px 18px;max-width:92%;font-size:15.5px;line-height:2.1;box-shadow:0 6px 28px rgba(91,138,176,.09);animation:up .35s ease}
 @keyframes up{from{opacity:0;transform:translateY(10px)}to{opacity:1}}
 .thinking{display:inline-flex;gap:7px;align-items:center;padding:8px 2px}
 .thinking span{width:8px;height:8px;border-radius:50%;background:var(--acc);opacity:.35;animation:think 1.2s infinite ease-in-out}
@@ -210,9 +210,10 @@ let treeZoom=1,suppressClick=false;
 
 let treeWUser=null;
 function treeW(){return treeWUser!=null?treeWUser:(treeMode==='graph'?340:250)}
+function treeMaxW(){return Math.max(180,window.innerWidth-60-236-480)}
 function syncTreeWidth(){const t=document.getElementById('tree'),h=document.getElementById('treeResize');
  if(!panels.tree){t.style.width='';h.style.display='none';return}
- t.style.width=treeW()+'px';h.style.display='block'}
+ t.style.width=Math.min(treeW(),treeMaxW())+'px';h.style.display='block'}
 const _mc=document.createElement('canvas').getContext('2d');_mc.font='12px system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 const NODE_W=120,NODE_H=90;
 function treeLines(title,maxW){const s=String(title==null?'':title);
@@ -638,7 +639,7 @@ function wireGraphPan(){const svg=document.getElementById('treeGraph');const sc=
 wireGraphPan();
 function wireTreeResize(){const h=document.getElementById('treeResize');if(!h||h._wired)return;h._wired=true;
  h.onpointerdown=(e)=>{e.stopPropagation();e.preventDefault();h._st={x:e.clientX,w:treeW()};document.getElementById('tree').style.transition='none';try{h.setPointerCapture(e.pointerId)}catch(_){}};
- h.onpointermove=(e)=>{const st=h._st;if(!st)return;treeWUser=Math.min(innerWidth-120,Math.max(180,st.w-(e.clientX-st.x)));syncTreeWidth()};
+ h.onpointermove=(e)=>{const st=h._st;if(!st)return;treeWUser=Math.max(180,Math.min(treeMaxW(),st.w-(e.clientX-st.x)));syncTreeWidth()};
  const end=()=>{h._st=null;document.getElementById('tree').style.transition=''};h.onpointerup=end;h.onpointercancel=end;
  h.ondblclick=()=>{treeWUser=null;syncTreeWidth()}}
 wireTreeResize();

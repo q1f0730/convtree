@@ -426,6 +426,8 @@ check(INK.count("border-right:1px solid var(--line)") >= 2 and "border-left:1px 
 check("#tabs::after" in INK, "标签栏filler线")
 check("overflow-y:hidden" in INK, "禁标签竖滚动条")
 check("::-webkit-scrollbar-thumb" in INK and "scrollbar-button" in INK, "自定义滚动条")
+check("treeMaxW" in INK and "innerWidth-60-236-480" in INK, "树宽钳制保聊天")
+check("padding:24px 20px" in INK and "padding:14px 18px" in INK, "消息区收边")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
