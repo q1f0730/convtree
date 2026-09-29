@@ -622,7 +622,7 @@ function paintNotes(){const N=document.getElementById('notes');N.innerHTML='';
  notes.forEach(n=>N.appendChild(card(n)))}
 function card(n){const d=document.createElement('div');d.className='ncard';
  const hr1=document.createElement('hr'),hr2=document.createElement('hr');
- const p=document.createElement('div');p.textContent=n.text;
+ const p=document.createElement('div');p.innerHTML=md(n.text);
  const m=document.createElement('div');m.className='meta';
  m.innerHTML='';m.appendChild(document.createTextNode(n.time+' · '));
  const a=document.createElement('a');a.textContent='出自：'+n.from;
