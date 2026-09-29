@@ -334,6 +334,8 @@ check("/delete" in INK and "doDelete" in INK and "selNodes" in INK, "删除接�
 check("确认删除" in INK, "二次确认")
 check("_mc.measureText" in INK and "colW" in INK, "导图框随文展宽")
 check('id="treeScroll"' in INK, "图谱滚动区")
+check("is-thinking" in INK and "@keyframes think" in INK and "@keyframes breathe" in INK, "思考动画")
+check("caret" in INK and "@keyframes blink" in INK, "流式光标")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
