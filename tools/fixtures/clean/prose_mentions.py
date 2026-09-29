@@ -16,6 +16,9 @@ DOC_2 = "本系统没有 DELETE FROM overlay 的必要：撤回以追加事件�
 # 反向对照 3：有 UPDATE overlay，但没有 SET 与 message_id 赋值
 DOC_3 = "锚点归属一经创建即固定，因此不存在 UPDATE overlay 改写归属的代码路径。"
 
+# 反向对照 4：提到删整支的正确做法，但 DELETE FROM message 后面接的是中文句号 —— 不构成语句
+DOC_4 = "删除整支只给 node 打 deleted 标记，从不 DELETE FROM message。"
+
 
 def read_only_queries(conn, mid):
     """正常只读路径：这些不该被任何规则命中。"""

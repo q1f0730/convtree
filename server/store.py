@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS node (
   title       TEXT NOT NULL,
   anchor_text TEXT,
   color       TEXT,
-  created_at  INTEGER NOT NULL
+  created_at  INTEGER NOT NULL,
+  deleted     INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS message (
   id         TEXT PRIMARY KEY,
@@ -48,6 +49,9 @@ def init_db():
     conn = connect()
     try:
         conn.executescript(SCHEMA)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(node)")]
+        if "deleted" not in cols:  # 老库迁移：删整支用的软删除标
+            conn.execute("ALTER TABLE node ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
         conn.commit()
     finally:
         conn.close()
@@ -65,7 +69,8 @@ def create_node(parent_id, title, anchor_text=None, color=None):
     nid, ts = uid("nd"), now_ms()
     conn = connect()
     try:
-        if parent_id and not conn.execute("SELECT 1 FROM node WHERE id=?", (parent_id,)).fetchone():
+        if parent_id and not conn.execute(
+                "SELECT 1 FROM node WHERE id=? AND deleted=0", (parent_id,)).fetchone():
             raise LookupError("父节点不存在")
         conn.execute("INSERT INTO node(id,parent_id,title,anchor_text,color,created_at) VALUES(?,?,?,?,?,?)",
                      (nid, parent_id, title, anchor_text, color, ts))
@@ -79,13 +84,14 @@ def create_node(parent_id, title, anchor_text=None, color=None):
 def list_nodes():
     conn = connect()
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM node ORDER BY created_at")]
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM node WHERE deleted=0 ORDER BY created_at")]
     finally:
         conn.close()
 
 
 def node_path(node_id):
-    """根→自身 id 链（D-107 上下文的唯一来源）。"""
+    """根→自身 id 链（D-107 上下文的唯一来源）。已删节点视为不存在。"""
     out, seen, cur = [], set(), node_id
     conn = connect()
     try:
@@ -98,6 +104,8 @@ def node_path(node_id):
             cur = row["parent_id"]
     finally:
         conn.close()
+    if not out or any(r.get("deleted") for r in out):
+        return []
     return list(reversed(out))
 
 
@@ -127,10 +135,32 @@ def rename_node(node_id, title):
         raise ValueError("标题为空")
     conn = connect()
     try:
-        cur = conn.execute("UPDATE node SET title=? WHERE id=?", (title.strip(), node_id))
+        cur = conn.execute("UPDATE node SET title=? WHERE id=? AND deleted=0",
+                           (title.strip(), node_id))
         conn.commit()
         if cur.rowcount == 0:
             raise LookupError("节点不存在")
     finally:
         conn.close()
     return {"id": node_id, "title": title.strip()}
+
+
+def delete_subtree(node_id):
+    """软删除整支：节点打 deleted 标，消息行一字不动（D-101 冻结原文）。
+    返回被隐藏的 id 列表（含自身）。"""
+    conn = connect()
+    try:
+        row = conn.execute("SELECT id FROM node WHERE id=? AND deleted=0", (node_id,)).fetchone()
+        if not row:
+            raise LookupError("节点不存在")
+        ids, stack = [], [node_id]
+        while stack:
+            cur = stack.pop()
+            ids.append(cur)
+            stack.extend(r[0] for r in conn.execute(
+                "SELECT id FROM node WHERE parent_id=? AND deleted=0", (cur,)))
+        conn.execute("UPDATE node SET deleted=1 WHERE id IN (%s)" % ",".join("?" * len(ids)), ids)
+        conn.commit()
+    finally:
+        conn.close()
+    return ids

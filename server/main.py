@@ -125,7 +125,10 @@ def nodes():
 
 @app.get("/api/nodes/{node_id}/messages")
 def node_messages(node_id: str):
-    return {"path": store.node_path(node_id), "messages": store.list_messages(node_id)}
+    path = store.node_path(node_id)
+    if not path:
+        raise HTTPException(404, "节点不存在")
+    return {"path": path, "messages": store.list_messages(node_id)}
 
 
 @app.post("/api/nodes/{node_id}/suggest-title")
@@ -166,6 +169,16 @@ def rename(node_id: str, body: RenameIn):
         raise HTTPException(404, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@app.post("/api/nodes/{node_id}/delete")
+def delete_node(node_id: str):
+    """软删除整支（含全部子孙；D-101：消息行不动，只藏节点）。"""
+    try:
+        ids = store.delete_subtree(node_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    return {"deleted": ids, "count": len(ids)}
 
 
 @app.post("/api/branch")

@@ -195,7 +195,7 @@ bad = []
 for fn in os.listdir(os.path.join(ROOT, "server")):
     if fn.endswith(".py") and not fn.startswith("accept_"):  # 验收脚本允许提及模式（注释/断言），只查产品代码
         src = open(os.path.join(ROOT, "server", fn), encoding="utf-8").read()
-        if re.search(r"UPDATE\s+message\b", src, re.I) or re.search(r"DELETE\s+FROM\s+message\b", src, re.I):
+        if re.search(r"UPDATE\s+message\b", src, re.I) or re.search(r"DELETE\s+FROM\s+message\b", src, re.I) or re.search(r"DELETE\s+FROM\s+node\b", src, re.I):
             bad.append(fn)
 check(not bad, "D-101无改删" + str(bad))
 rp = subprocess.run([sys.executable, "tools/check_invariants.py", "--all"], capture_output=True, cwd=ROOT)
@@ -284,6 +284,54 @@ llm_mod.chat_sync = _real_chat
 check(r.status_code == 200 and "生成失败" in r.text, "失败落库且可见")
 d = sse_done(r.text)
 check(bool(d and d.get("error") is True), "失败带error标")
+# ── 删除整支 ──
+r = c.post("/api/chat", json={"text": "待删根"})
+del_root = sse_done(r.text)["nodeId"]
+del_ch = c.post("/api/branch", json={"parentId": del_root, "anchorText": "待删子"}).json()["node"]["id"]
+del_gr = c.post("/api/branch", json={"parentId": del_ch, "anchorText": "待删孙"}).json()["node"]["id"]
+c.post("/api/chat", json={"nodeId": del_gr, "text": "孙辈发言"})
+r = c.post("/api/nodes/%s/delete" % del_ch)
+check(r.status_code == 200 and set(r.json()["deleted"]) == {del_ch, del_gr}, "删整支返回两代")
+check(r.json()["count"] == 2, "计数2")
+ids = [n["id"] for n in c.get("/api/nodes").json()["nodes"]]
+check(del_ch not in ids and del_gr not in ids and del_root in ids, "列表只剩根")
+check(c.get("/api/nodes/%s/messages" % del_ch).status_code == 404, "已删消息404")
+check(c.post("/api/chat", json={"nodeId": del_ch, "text": "x"}).status_code == 404, "已删续聊404")
+check(c.post("/api/branch", json={"parentId": del_ch, "anchorText": "x"}).status_code == 404, "已删下挂404")
+check(c.post("/api/nodes/%s/rename" % del_gr, json={"title": "x"}).status_code == 404, "已删改名404")
+check(c.post("/api/nodes/%s/delete" % del_ch).status_code == 404, "重复删404")
+check(c.post("/api/nodes/nd_nope/delete").status_code == 404, "坏点删404")
+check(len(store_mod.list_messages(del_gr)) == 2, "消息行冻结保留")
+check(build_context(del_gr) == [], "已删无上下文")
+import sqlite3 as _sq
+old_db = os.path.join(ROOT, "data", "mig_old.db")
+for sfx in ("", "-wal", "-shm", "-journal"):
+    if os.path.exists(old_db + sfx):
+        os.remove(old_db + sfx)
+_con = _sq.connect(old_db)
+_con.execute("CREATE TABLE node(id TEXT PRIMARY KEY,parent_id TEXT,title TEXT NOT NULL,anchor_text TEXT,color TEXT,created_at INTEGER NOT NULL)")
+_con.execute("INSERT INTO node VALUES('nd_old',NULL,'老节点',NULL,NULL,1)")
+_con.execute("CREATE TABLE message(id TEXT PRIMARY KEY,node_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at INTEGER NOT NULL)")
+_con.commit()
+_con.close()
+_prev = store_mod.DB_PATH
+store_mod.DB_PATH = old_db
+try:
+    store_mod.init_db()
+    _con = _sq.connect(old_db)
+    cols = [rr[1] for rr in _con.execute("PRAGMA table_info(node)")]
+    _con.close()
+    check("deleted" in cols, "老库迁移出deleted列")
+    check(any(n["id"] == "nd_old" for n in store_mod.list_nodes()), "老数据可读")
+finally:
+    store_mod.DB_PATH = _prev
+for sfx in ("", "-wal", "-shm", "-journal"):
+    if os.path.exists(old_db + sfx):
+        os.remove(old_db + sfx)
+check('id="treemenu"' in INK and 'id="batchbar"' in INK, "删除菜单与批量条")
+check("oncontextmenu" in INK and "showTreeMenu" in INK, "树右键菜单")
+check("/delete" in INK and "doDelete" in INK and "selNodes" in INK, "删除接线与多选")
+check("确认删除" in INK, "二次确认")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))

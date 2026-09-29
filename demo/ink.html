@@ -78,6 +78,18 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 .ncard .meta{color:var(--mut);font-size:12px;margin-top:10px;letter-spacing:1px}
 .ncard .meta a{color:var(--acc);cursor:pointer;text-decoration:none}
 #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#2c3644;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;display:none;letter-spacing:1px}
+#treemenu{position:fixed;display:none;background:#2c3644;color:#fff;border-radius:12px;padding:5px;font-size:14px;z-index:70;box-shadow:0 14px 36px rgba(44,54,68,.3);min-width:200px;font-family:system-ui}
+#treemenu button{display:block;width:100%;text-align:left;background:none;border:0;color:#fff;padding:8px 14px;cursor:pointer;font-size:14px;border-radius:8px;font-family:inherit}
+#treemenu button:hover{background:#3d4a5c}
+#treemenu button.danger{color:#ffb3b3}
+#treemenu .cf{padding:8px 14px;font-size:13px}
+#treemenu .cf .row{display:flex;gap:8px;margin-top:10px}
+#treemenu .cf .row button{border:1px solid #55606f;text-align:center}
+#treemenu .cf .row button.go{background:#b05252;border:0}
+.tnode.sel{background:#fdeef4;box-shadow:inset 0 0 0 1.5px #e06ba8}
+#batchbar{display:none;gap:10px;align-items:center;padding:8px 18px;font-size:13px;background:#fdf2f6;border-top:1px solid #f3c9d8}
+#batchbar button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 14px;cursor:pointer;font-family:inherit;font-size:13px}
+#batchbar button.go{background:#b05252;color:#fff;border:0}
 </style></head><body>
 <div id="side">
 <button data-m="chat" class="on" title="聊天">💬</button>
@@ -100,7 +112,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="composer" style="display:none"><input id="q2" placeholder="继续问…" style="flex:1;padding:11px 13px;font-size:15px;border:1px solid #ccc;border-radius:10px"><button id="send2" style="padding:0 22px;border-radius:10px;border:0;background:#222;color:#fff;cursor:pointer">发送</button></div>
 </div>
 <div id="notes"></div>
-</div></div>
+</div><div id="batchbar"></div></div>
 <div id="drawer">
 <h3>设置</h3><div style="font-size:12px;color:var(--mut)">模型接入 · 密钥只存本机</div>
 <label>服务商</label><select id="sProv"></select>
@@ -111,6 +123,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="drawMsg"></div>
 </div>
 <div id="menu"><button data-a="copy">复制</button><button data-a="ul">划线</button><button data-a="note">记笔记</button><button data-a="branch">分支</button></div>
+<div id="treemenu"></div>
 <div id="pal"></div>
 <div id="toast"></div>
 <script>
@@ -133,10 +146,11 @@ function renderTabs(){const bar=document.getElementById('tabs');bar.innerHTML=''
 function closeTab(t){const i=tabs.indexOf(t);if(i<0)return;tabs.splice(i,1);
  if(!tabs.length){cur=null;renderTabs();renderMsgs();renderTree();refreshRoots();return}
  cur=tabs[Math.max(0,i-1)];switchTab(cur)}
-function switchTabMsgs(t){if(t.msgs===null){fetch('/api/nodes/'+t.nodeId+'/messages').then(r=>r.json()).then(d=>{
-   t.msgs=(d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content}));renderMsgs()}).catch(()=>{t.msgs=[];renderMsgs()});return}
+function switchTabMsgs(t){if(t.msgs===null){fetch('/api/nodes/'+t.nodeId+'/messages').then(r=>{if(!r.ok)throw 0;return r.json()}).then(d=>{
+   if(!tabs.includes(t))return;
+   t.msgs=(d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content}));renderMsgs()}).catch(()=>{if(tabs.includes(t)){t.msgs=[];renderMsgs()}});return}
  renderMsgs()}
-function openNode(n){const ensure=(x)=>{let t=tabs.find(y=>y.nodeId===x.id);
+function openNode(n){if(!n)return;const ensure=(x)=>{let t=tabs.find(y=>y.nodeId===x.id);
  if(!t){t={id:++tabSeq,nodeId:x.id,name:x.title,parent:null,color:x.color,msgs:null};tabs.push(t)}
  return t};
  const t=ensure(n);
@@ -155,11 +169,13 @@ function renderTreeList(){const L=document.getElementById('treeList');L.innerHTM
  if(!nodesCache.length){const e=document.createElement('div');e.style.cssText='padding:8px 11px;font-size:13px;color:var(--mut)';e.textContent='还没有对话';L.appendChild(e);return}
  const kids=treeKids();
  const walk=(pid,depth)=>{(kids[pid]||[]).forEach(n=>{
-   const d=document.createElement('div');d.className='tnode'+(cur&&cur.nodeId===n.id?' on':'');
+   const d=document.createElement('div');d.className='tnode'+(cur&&cur.nodeId===n.id?' on':'')+(selNodes.has(n.id)?' sel':'');
    d.style.paddingLeft=(11+depth*16)+'px';
    d.innerHTML='<span class="dot"></span><span></span>';
    d.firstChild.style.background=n.color||'#c9d3e0';d.lastChild.textContent=n.title;
-   d.onclick=()=>openNode(n);L.appendChild(d);walk(n.id,depth+1)})};
+   d.onclick=(e)=>{if(e.ctrlKey||e.metaKey)toggleSel(n.id);else openNode(n)};
+   d.oncontextmenu=(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,n)};
+   L.appendChild(d);walk(n.id,depth+1)})};
  walk('',0)}
 function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=document.getElementById('treeGraph');svg.innerHTML='';
  if(!nodesCache.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';svg.appendChild(t);svg.setAttribute('height',40);return}
@@ -176,18 +192,19 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
   pa.setAttribute('d','M '+x1+' '+p.y+' H '+mx+' V '+c.y+' H '+c.x);
   pa.setAttribute('fill','none');pa.setAttribute('stroke','#b9c7d8');pa.setAttribute('stroke-width','1.5');
   svg.appendChild(pa)});
- order.forEach(o=>{const c=pos[o.n.id];const on=cur&&cur.nodeId===o.n.id;
+ order.forEach(o=>{const c=pos[o.n.id];const on=cur&&cur.nodeId===o.n.id;const sel=selNodes.has(o.n.id);
   const g=document.createElementNS(NS,'g');g.setAttribute('class','tn');
   const rc=document.createElementNS(NS,'rect');
   rc.setAttribute('x',c.x);rc.setAttribute('y',c.y-12);rc.setAttribute('width',BW);rc.setAttribute('height',24);rc.setAttribute('rx',8);
-  rc.setAttribute('fill',on?'#e3edf5':'#ffffff');rc.setAttribute('stroke',on?'#5b8ab0':(o.n.color||'#c9d3e0'));rc.setAttribute('stroke-width',on?'2':'1.2');
+  rc.setAttribute('fill',on?'#e3edf5':(sel?'#fdeef4':'#ffffff'));rc.setAttribute('stroke',on?'#5b8ab0':(sel?'#e06ba8':(o.n.color||'#c9d3e0')));rc.setAttribute('stroke-width',(on||sel)?'2':'1.2');
   g.appendChild(rc);
   const dt=document.createElementNS(NS,'circle');dt.setAttribute('cx',c.x+11);dt.setAttribute('cy',c.y);dt.setAttribute('r',4);
   dt.setAttribute('fill',o.n.color||'#c9d3e0');g.appendChild(dt);
   const tx=document.createElementNS(NS,'text');tx.setAttribute('x',c.x+20);tx.setAttribute('y',c.y+4);
   tx.textContent=o.n.title.length>7?o.n.title.slice(0,7)+'…':o.n.title;
   const ti=document.createElementNS(NS,'title');ti.textContent=o.n.title;tx.appendChild(ti);g.appendChild(tx);
-  g.addEventListener('click',()=>openNode(o.n));svg.appendChild(g)})}
+  g.addEventListener('click',(e)=>{if(e.ctrlKey||e.metaKey)toggleSel(o.n.id);else openNode(o.n)});
+  g.addEventListener('contextmenu',(e)=>{e.preventDefault();showTreeMenu(e.clientX,e.clientY,o.n)});svg.appendChild(g)})}
 function startRename(d,t){if(d.querySelector('input'))return;
  const inp=document.createElement('input');inp.value=t.name;
  inp.style.cssText='width:110px;font:inherit;background:#fff;border:1px solid var(--acc);border-radius:4px;padding:1px 4px';
@@ -349,6 +366,54 @@ document.querySelectorAll('#side button').forEach(b=>b.onclick=()=>{
  if(!on)panels[b.dataset.m]=true; /* 至少留一栏，防全关白屏 */
  syncPanels()});
 document.querySelectorAll('#treeTog button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();treeMode=b.dataset.v;renderTree()});
+const selNodes=new Set();
+function toggleSel(id){if(selNodes.has(id))selNodes.delete(id);else selNodes.add(id);syncBatchbar();renderTree()}
+function subtreeIds(id){const kids=treeKids();const out=[];const walk=(x)=>{out.push(x);(kids[x]||[]).forEach(y=>walk(y.id))};walk(id);return out}
+function topsOf(ids){const s=new Set(ids);const par={};nodesCache.forEach(n=>par[n.id]=n.parent_id||'');
+ return ids.filter(id=>{let p=par[id],guard=0;while(p&&guard++<60){if(s.has(p))return false;p=par[p]}return true})}
+function unionCount(ids){const u=new Set();topsOf(ids).forEach(t=>subtreeIds(t).forEach(x=>u.add(x)));return u.size}
+function syncBatchbar(){const B=document.getElementById('batchbar');const n=selNodes.size;
+ if(!n){B.style.display='none';B.innerHTML='';B._cf=false;return}
+ B.style.display='flex';B.innerHTML='';
+ const s=document.createElement('span');B.appendChild(s);
+ if(!B._cf){s.textContent='已选 '+n+' 个分支（含子孙共 '+unionCount([...selNodes])+' 个节点）';
+  const del=document.createElement('button');del.className='go';del.textContent='删除';del.onclick=()=>{B._cf=true;syncBatchbar()};B.appendChild(del);
+  const c=document.createElement('button');c.textContent='取消选择';c.onclick=()=>{selNodes.clear();syncBatchbar();renderTree()};B.appendChild(c)}
+ else{s.textContent='确认删除这 '+n+' 个分支（含子孙共 '+unionCount([...selNodes])+' 个节点）？';
+  const go=document.createElement('button');go.className='go';go.textContent='确认删除';go.onclick=()=>{B._cf=false;doDelete([...selNodes])};B.appendChild(go);
+  const c=document.createElement('button');c.textContent='取消';c.onclick=()=>{B._cf=false;syncBatchbar()};B.appendChild(c)}}
+function hideTreeMenu(){document.getElementById('treemenu').style.display='none'}
+function showTreeMenu(x,y,n){const M=document.getElementById('treemenu');M.innerHTML='';
+ const t=document.createElement('div');t.style.cssText='padding:6px 14px;font-size:12px;color:#9aa5b5;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';t.textContent=n.title;M.appendChild(t);
+ const cnt=subtreeIds(n.id).length;
+ const add=(label,fn)=>{const b=document.createElement('button');b.className='danger';b.textContent=label;b.onclick=fn;M.appendChild(b)};
+ if(selNodes.size>1&&selNodes.has(n.id))add('删除所选 '+selNodes.size+' 个分支（共 '+unionCount([...selNodes])+' 个节点）',()=>treeMenuConfirm(n,'sel'));
+ add(cnt>1?('删除该分支（含 '+(cnt-1)+' 个子节点）'):'删除该分支',()=>treeMenuConfirm(n,'one'));
+ M.style.display='block';M.style.left=Math.min(x,innerWidth-250)+'px';M.style.top=(y+6)+'px'}
+function treeMenuConfirm(n,which){const M=document.getElementById('treemenu');M.innerHTML='';
+ const ids=which==='sel'?[...selNodes]:[n.id];const total=unionCount(ids);
+ const c=document.createElement('div');c.className='cf';c.textContent='确认删除？所选含子孙共 '+total+' 个节点。';
+ const row=document.createElement('div');row.className='row';
+ const go=document.createElement('button');go.className='go';go.textContent='确认删除';go.onclick=()=>doDelete(ids);row.appendChild(go);
+ const back=document.createElement('button');back.textContent='取消';back.onclick=hideTreeMenu;row.appendChild(back);
+ c.appendChild(row);M.appendChild(c)}
+async function doDelete(ids){hideTreeMenu();
+ const tops=topsOf(ids).filter(id=>nodesCache.find(n=>n.id===id));
+ if(!tops.length){toast('所选已不在树上');return}
+ const del=new Set();let fails=0;
+ for(const id of tops){try{const r=await fetch('/api/nodes/'+id+'/delete',{method:'POST'});
+  if(!r.ok)throw new Error((await r.text()).slice(0,100));
+  (await r.json()).deleted.forEach(x=>del.add(x))}catch(e){fails++;toast('删除失败：'+e.message)}}
+ if(!del.size)return;
+ nodesCache=nodesCache.filter(n=>!del.has(n.id));
+ selNodes.clear();syncBatchbar();closeTabsByIds(del);renderTree();refreshRoots();
+ toast(fails?('删了 '+del.size+' 个节点，'+fails+' 支失败'):('已删除 '+del.size+' 个节点'))}
+function closeTabsByIds(set){let ch=false;for(let i=tabs.length-1;i>=0;i--){if(set.has(tabs[i].nodeId)){tabs.splice(i,1);ch=true}}
+ if(!ch)return;
+ if(!cur||set.has(cur.nodeId)){cur=tabs.length?tabs[tabs.length-1]:null}
+ renderTabs();if(cur)switchTabMsgs(cur);else renderMsgs()}
+document.addEventListener('click',e=>{if(!e.target.closest('#treemenu'))hideTreeMenu()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
 document.getElementById('send').onclick=()=>{send(document.getElementById('q').value);document.getElementById('q').value=''};
 document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};

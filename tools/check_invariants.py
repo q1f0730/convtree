@@ -77,6 +77,7 @@ RULES = [
         "patterns": [
             (_UPDATE_ON(_M), "UPDATE ... message ... SET（含别名写法）"),
             (_REPLACE_INTO(_M), "INSERT OR REPLACE INTO message（= 删除+插入，等于改写原文）"),
+            (_DELETE_FROM(_M), "DELETE FROM message（删行等于销毁原文；删整支只许软删节点）"),
         ],
     },
 ]
