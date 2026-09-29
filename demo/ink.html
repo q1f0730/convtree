@@ -91,6 +91,8 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #fmtmenu button.go{background:#5b8ab0;border:0}
 #fmtmenu button.ghost{border:0;color:#9aa5b5}
 mark.hl{background:transparent;border-radius:3px;padding:0 2px;box-shadow:inset 0 -0.62em var(--mk,rgba(91,138,176,.28))}
+mark.hl[data-ref]{cursor:pointer}
+mark.hl[data-ref]:hover{filter:brightness(.96)}
 u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding-bottom:10vh}
 #empty h1{font-size:26px;font-weight:500;margin:0;letter-spacing:8px;color:var(--ink)}
@@ -412,7 +414,7 @@ function atomsHtml(atoms,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start&&(o.kind=
     if(ops.length)css+='opacity:'+(Math.min.apply(null,ops)/100)+';';
     if(css)pt='<span style="'+css+'">'+pt+'</span>'}
    ovs.forEach(o=>{if(o.kind==='ul'&&ins(o))pt='<u class="uln" style="text-decoration-color:'+o.color+'">'+pt+'</u>'});
-   ovs.forEach(o=>{if(o.kind==='mark'&&ins(o))pt='<mark class="hl" style="--mk:'+o.color+'55">'+pt+'</mark>'});
+   ovs.forEach(o=>{if(o.kind==='mark'&&ins(o))pt='<mark class="hl" style="--mk:'+o.color+'55"'+(o.ref_node?' data-ref="'+o.ref_node+'"':'')+'>'+pt+'</mark>'});
    h+=pt}
   return h+a.post}).join('')}
 function mdOv(text,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start);if(!ovs.length)return md(text);return atomsHtml(mdSeg(text),ovs)}
@@ -432,7 +434,7 @@ function attachOvs(msgs,ovs,nodeId){const byMid={};(ovs||[]).forEach(x=>{(byMid[
  const kids=nodesCache.filter(n=>n.parent_id===nodeId&&n.anchor_text);
  return msgs.map(m=>{const list=(byMid[m.mid]||[]).slice();
   kids.forEach(k=>{const at=m.text.indexOf(k.anchor_text);
-   if(at>=0&&!list.some(o=>o.kind==='mark'&&o.start===at&&o.end===at+k.anchor_text.length))list.push({derived:true,start:at,end:at+k.anchor_text.length,kind:'mark',color:k.color||'#f25555'})});
+   if(at>=0&&!list.some(o=>o.kind==='mark'&&o.start===at&&o.end===at+k.anchor_text.length))list.push({derived:true,start:at,end:at+k.anchor_text.length,kind:'mark',color:k.color||'#f25555',ref_node:k.id})});
   m.ov=list;return m})}
 async function fetchMsgs(nodeId){const gm=fetch('/api/nodes/'+nodeId+'/messages').then(r=>{if(!r.ok)throw 0;return r.json()});
  const go=fetch('/api/nodes/'+nodeId+'/overlays').then(r=>{if(!r.ok)throw 0;return r.json()}).catch(()=>({overlays:[]}));
@@ -519,6 +521,10 @@ function showFmtMenu(){resetFmt();const M=document.getElementById('fmtmenu');M.i
  M.appendChild(act);M._info=document.getElementById('menu')._info;M.style.display='block'}
 document.getElementById('fmtmenu').addEventListener('click',e=>e.stopPropagation());
 document.addEventListener('click',e=>{if(!e.target.closest('#fmtmenu'))hideFmtMenu()});
+async function openRef(id){let n=nodesCache.find(x=>x.id===id);
+ if(!n){try{const d=await (await fetch('/api/nodes')).json();nodesCache=d.nodes||[];renderRoots(nodesCache);renderTree();n=nodesCache.find(x=>x.id===id)}catch(_){}}
+ if(n)openNode(n);else toast('分支不在了（可能已删）')}
+document.getElementById('msgs').addEventListener('click',e=>{const m=e.target.closest&&e.target.closest('mark.hl');if(!m||!m.dataset.ref)return;openRef(m.dataset.ref)});
 async function textAct(act,info){
  if(!cur){toast('先开一个对话');return}
  const txt=info.text;
