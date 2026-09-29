@@ -281,6 +281,18 @@ def add_note(text, from_node=None, from_name=""):
             "from_name": from_name or "", "created_at": ts}
 
 
+def delete_note(note_id):
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM note WHERE id=?", (note_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise LookupError("笔记不存在")
+    finally:
+        conn.close()
+    return {"id": note_id}
+
+
 def list_notes():
     conn = connect()
     try:

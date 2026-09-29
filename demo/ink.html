@@ -619,7 +619,13 @@ function card(n){const d=document.createElement('div');d.className='ncard';
  m.innerHTML='';m.appendChild(document.createTextNode(n.time+' · '));
  const a=document.createElement('a');a.textContent='出自：'+n.from;
  a.onclick=()=>{const t=n.nodeId&&nodesCache.find(x=>x.id===n.nodeId);if(t){setModule('chat');openNode(t)}else toast('原分支不在了（可能已删）')};
- m.appendChild(a);d.append(hr1,p,hr2,m);return d}
+ m.appendChild(a);
+ const del=document.createElement('a');del.textContent='删除';del.style.cssText='margin-left:8px;cursor:pointer';
+ del.onclick=()=>{
+  if(del.dataset.armed){fetch('/api/notes/'+n.id,{method:'DELETE'}).then(r=>{if(!r.ok)throw 0;
+   const i=notes.findIndex(x=>x.id===n.id);if(i>=0)notes.splice(i,1);paintNotes();toast('已删除')}).catch(()=>toast('删除失败'))}
+  else{del.dataset.armed='1';del.textContent='确认删除？';setTimeout(()=>{if(del.isConnected){delete del.dataset.armed;del.textContent='删除'}},2500)}};
+ m.appendChild(document.createTextNode(' · '));m.appendChild(del);d.append(hr1,p,hr2,m);return d}
 const panels={chat:true,note:false,tree:true};
 function syncPanels(){document.querySelectorAll('#side button[data-m]').forEach(b=>b.classList.toggle('on',!!panels[b.dataset.m]));
  document.getElementById('chat').style.display=panels.chat?'flex':'none';

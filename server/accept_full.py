@@ -335,6 +335,12 @@ nl = c.get("/api/notes").json()["notes"]
 check([n["text"] for n in nl[:2]] == ["笔记二", "笔记一"], "笔记倒序")
 ctx2 = build_context(ov_root)
 check(ctx2 == [{"role": m["role"], "content": m["content"]} for m in store_mod.list_messages(ov_root)], "笔记不进上下文")
+nid = c.post("/api/notes", json={"text": "待删"}).json()["id"]
+check(c.delete("/api/notes/%s" % nid).status_code == 200, "笔记删除200")
+check(nid not in [n["id"] for n in c.get("/api/notes").json()["notes"]], "删后列表无")
+check(c.delete("/api/notes/%s" % nid).status_code == 404, "重删404")
+check(c.delete("/api/notes/nd_nope").status_code == 404, "删坏点404")
+check("api/notes/" in INK and "确认删除" in INK, "笔记删除接线")
 check("mdOv" in INK and "rangeToSrc" in INK and "attachOvs" in INK, "坐标引擎")
 check("dataset.mid" in INK and "/api/overlays" in INK and "/api/notes" in INK, "落库接线")
 check("readBack" not in INK and "wrapRange" not in INK, "DOM外挂退役")

@@ -267,6 +267,14 @@ def post_note(body: NoteIn):
         raise HTTPException(400, str(exc))
 
 
+@app.delete("/api/notes/{note_id}")
+def delete_note(note_id: str):
+    try:
+        return store.delete_note(note_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @app.get("/api/notes")
 def get_notes():
     return {"notes": store.list_notes()}
