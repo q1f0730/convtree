@@ -132,7 +132,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 .ncard hr{border:0;border-top:1px solid var(--acc);opacity:.45;margin:12px 0}
 .ncard .meta{color:var(--mut);font-size:12px;margin-top:10px;letter-spacing:1px}
 .ncard .meta a{color:var(--acc);cursor:pointer;text-decoration:none}
-#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#2c3644;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;display:none;letter-spacing:1px}
+#toast{position:fixed;z-index:100;bottom:28px;left:50%;transform:translateX(-50%);background:#2c3644;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;display:none;letter-spacing:1px}
 #treemenu{position:fixed;display:none;background:#2c3644;color:#fff;border-radius:12px;padding:5px;font-size:14px;z-index:70;box-shadow:0 14px 36px rgba(44,54,68,.3);min-width:200px;font-family:system-ui}
 #treemenu button{display:block;width:100%;text-align:left;background:none;border:0;color:#fff;padding:8px 14px;cursor:pointer;font-size:14px;border-radius:8px;font-family:inherit}
 #treemenu button:hover{background:#3d4a5c}
@@ -523,6 +523,7 @@ document.addEventListener('mouseup',e=>{
  if(!info||!info.text.trim()){menu.style.display='none';return}
  menu.style.display='block';
  menu.style.left=Math.min(e.clientX,innerWidth-260)+'px';menu.style.top=(e.clientY+8)+'px';
+ const mhh=menu.offsetHeight;if(e.clientY+8+mhh>innerHeight)menu.style.top=Math.max(8,innerHeight-mhh-8)+'px';
  menu._info=info});
 document.getElementById('menu').addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b)return;
@@ -563,7 +564,7 @@ document.getElementById('msgs').addEventListener('click',e=>{const m=e.target.cl
 async function textAct(act,info){
  if(!cur){toast('先开一个对话');return}
  const txt=info.text;
- if(act==='copy'){navigator.clipboard&&navigator.clipboard.writeText(txt);toast('已复制')}
+ if(act==='copy'){if(!navigator.clipboard){toast('当前环境不支持复制')}else{navigator.clipboard.writeText(txt).then(()=>toast('已复制'),()=>toast('复制失败，请手动复制'))}}
  else if(act==='ul'){const bm=bubbleMid(info.range);const m=bm&&bm.mid&&findMsg(bm.mid);
   if(!m){toast('等本轮落库后再划线');return}
   const off=rangeToSrc(info.range,bm.el,m);if(!off){toast('这次选区定位失败，换一段试试');return}
@@ -695,7 +696,7 @@ function showTreeMenu(x,y,n){const M=document.getElementById('treemenu');M.inner
  const add=(label,fn)=>{const b=document.createElement('button');b.className='danger';b.textContent=label;b.onclick=fn;M.appendChild(b)};
  if(selNodes.size>1&&selNodes.has(n.id))add('删除所选 '+selNodes.size+' 个分支（共 '+unionCount([...selNodes])+' 个节点）',()=>treeMenuConfirm(n,'sel'));
  add(cnt>1?((!n.parent_id?'删除该对话（含 '+(cnt-1)+' 个分支）':'删除该分支（含 '+(cnt-1)+' 个子节点）')):(!n.parent_id?'删除该对话':'删除该分支'),()=>treeMenuConfirm(n,'one'));
- M.style.display='block';M.style.left=Math.min(x,innerWidth-250)+'px';M.style.top=(y+6)+'px'}
+ M.style.display='block';M.style.left=Math.min(x,innerWidth-250)+'px';M.style.top=(y+6)+'px';const mhh2=M.offsetHeight;if(y+6+mhh2>innerHeight)M.style.top=Math.max(8,innerHeight-mhh2-8)+'px'}
 function treeMenuConfirm(n,which){const M=document.getElementById('treemenu');M.innerHTML='';
  const ids=which==='sel'?[...selNodes]:[n.id];const total=unionCount(ids);
  const c=document.createElement('div');c.className='cf';c.textContent='确认删除？所选含子孙共 '+total+' 个节点。';
