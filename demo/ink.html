@@ -55,7 +55,7 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #treeResize{position:absolute;top:0;left:-5px;width:11px;height:100%;cursor:ew-resize;z-index:6;display:none}
 #treeResize::after{content:'';position:absolute;top:0;bottom:0;left:4px;width:3px;border-radius:2px;background:transparent;transition:background .15s}
 #treeResize:hover::after{background:var(--acc)}
-.tnode span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tnode span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tree .hd{display:flex;align-items:center;gap:8px}
 #treeScope{font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;letter-spacing:0}
 #treeTog{margin-left:auto;display:flex;gap:4px}
