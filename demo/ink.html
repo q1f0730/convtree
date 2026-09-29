@@ -49,6 +49,7 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #treeResize:hover::after{background:var(--acc)}
 .tnode span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tree .hd{display:flex;align-items:center;gap:8px}
+#treeScope{font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;letter-spacing:0}
 #treeTog{margin-left:auto;display:flex;gap:4px}
 #treeTog button{border:1px solid var(--line);background:#fff;border-radius:8px;font-size:12px;padding:3px 10px;cursor:pointer;color:var(--mut);font-family:inherit}
 #treeTog button.on{background:var(--acc-soft);color:var(--acc);border-color:var(--acc)}
@@ -159,7 +160,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 </div>
 <div id="notes"></div>
 </div><div id="batchbar"></div></div>
-<div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span><span id="treeZoom"><button data-z="out">−</button><button data-z="reset">100%</button><button data-z="in">＋</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div>
+<div id="tree"><div class="hd">树<span id="treeScope"></span><span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span><span id="treeZoom"><button data-z="out">−</button><button data-z="reset">100%</button><button data-z="in">＋</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div>
 <div id="treeResize" title="拖动调整树栏宽度（双击复位）"></div></div></div>
 <div id="drawer">
 <div class="sheet">
@@ -228,6 +229,14 @@ function treeLines(title,maxW){const s=String(title==null?'':title);
  if(l1)return[l1.slice(0,-1)+'…'];
  return[s.slice(0,1)+'…']}
 function treeKids(){const kids={};nodesCache.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});return kids}
+let lastTreeRid='@@init';
+function visibleNodes(){
+ const rid=curRootId();
+ if(rid!==lastTreeRid){lastTreeRid=rid;selNodes.clear();syncBatchbar()}
+ if(!rid)return nodesCache;
+ const kids=treeKids();const out=[];
+ const walk=(id)=>{const n=nodesCache.find(x=>x.id===id);if(!n)return;out.push(n);(kids[id]||[]).forEach(c=>walk(c.id))};
+ walk(rid);return out}
 function renderTree(){
  document.querySelectorAll('#treeTog button').forEach(b=>b.classList.toggle('on',b.dataset.v===treeMode));
  document.getElementById('tree').classList.toggle('wide',treeMode==='graph');
@@ -237,10 +246,14 @@ function renderTree(){
  document.getElementById('treeZoom').style.display=treeMode==='graph'?'flex':'none';
  document.querySelector('#treeZoom button[data-z="reset"]').textContent=Math.round(treeZoom*100)+'%';
  syncTreeWidth();
+ const rid0=curRootId();
+ const sc0=document.getElementById('treeScope');
+ if(rid0){const rn=nodesCache.find(x=>x.id===rid0);sc0.textContent=rn?(' · '+rn.title):'';sc0.title=rn?rn.title:''}else{sc0.textContent='';sc0.title=''}
  if(treeMode==='list')renderTreeList();else renderTreeGraph()}
 function renderTreeList(){const L=document.getElementById('treeList');L.innerHTML='';
- if(!nodesCache.length){const e=document.createElement('div');e.style.cssText='padding:8px 11px;font-size:13px;color:var(--mut)';e.textContent='还没有对话';L.appendChild(e);return}
- const kids=treeKids();
+ const vis=visibleNodes();
+ if(!vis.length){const e=document.createElement('div');e.style.cssText='padding:8px 11px;font-size:13px;color:var(--mut)';e.textContent='还没有对话';L.appendChild(e);return}
+ const kids={};vis.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});
  const walk=(pid,depth)=>{(kids[pid]||[]).forEach(n=>{
    const d=document.createElement('div');d.className='tnode'+(cur&&cur.nodeId===n.id?' on':'')+(selNodes.has(n.id)?' sel':'');
    d.style.paddingLeft=(11+depth*16)+'px';
@@ -252,11 +265,12 @@ function renderTreeList(){const L=document.getElementById('treeList');L.innerHTM
  walk('',0)}
 function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=document.getElementById('treeGraph');svg.innerHTML='';
  const vp=document.createElementNS(NS,'g');vp.setAttribute('id','vp');svg.appendChild(vp);
- if(!nodesCache.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';vp.appendChild(t);svg.setAttribute('width',200);svg.setAttribute('height',40);return}
- const kids=treeKids();
+ const vis=visibleNodes();
+ if(!vis.length){const t=document.createElementNS(NS,'text');t.setAttribute('x',14);t.setAttribute('y',26);t.setAttribute('fill','#8b95a5');t.textContent='还没有对话';vp.appendChild(t);svg.setAttribute('width',200);svg.setAttribute('height',40);return}
+ const kids={};vis.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});
  const W=n=>NODE_W;
- const NW={};nodesCache.forEach(n=>NW[n.id]=W(n));
- const BH={};nodesCache.forEach(n=>BH[n.id]=NODE_H);
+ const NW={};vis.forEach(n=>NW[n.id]=W(n));
+ const BH={};vis.forEach(n=>BH[n.id]=NODE_H);
  const GAP=26,HGAP=34,BM=30;let cursor=14;const pos={};let maxD=0;
  const layoutBlock=(id,depth)=>{ // 子树块：兄弟并排，父居中；depth 显式下传
   maxD=Math.max(maxD,depth);
@@ -272,7 +286,7 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
   const fCx=pos[ch[0].id].x+NW[ch[0].id]/2,lCx=pos[ch[ch.length-1].id].x+NW[ch[ch.length-1].id]/2;
   pos[id]={x:(fCx+lCx)/2-NW[id]/2,w:NW[id],h:BH[id],depth:depth};
   cursor=startX+blockW+GAP;return blockW};
- nodesCache.filter(n=>!n.parent_id).forEach(r=>{layoutBlock(r.id,0)});
+ vis.filter(n=>!n.parent_id).forEach(r=>{layoutBlock(r.id,0)});
  Object.keys(pos).forEach(id=>{pos[id].x=Math.round(pos[id].x)});
  const Wd=cursor-GAP+14;
  const rowMH={};Object.keys(pos).forEach(id=>{const q=pos[id];rowMH[q.depth]=Math.max(rowMH[q.depth]||0,q.h)});
@@ -299,7 +313,7 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
   ends.forEach(e=>{line('M '+e.x+' '+e.y+' V '+busY);dot(e.x,busY)});
   line('M '+lo+' '+busY+' H '+hi);
   line('M '+px+' '+busY+' V '+py);dot(px,busY)});
- const order=[];nodesCache.forEach(n=>{if(pos[n.id])order.push({n:n,depth:pos[n.id].depth})});
+ const order=[];vis.forEach(n=>{if(pos[n.id])order.push({n:n,depth:pos[n.id].depth})});
  order.forEach(o=>{const c=pos[o.n.id];const y=Y(o.depth);const on=cur&&cur.nodeId===o.n.id;const sel=selNodes.has(o.n.id);
   const g=document.createElementNS(NS,'g');g.setAttribute('class','tn');
   const rc=document.createElementNS(NS,'rect');
