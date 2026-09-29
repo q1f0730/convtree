@@ -44,8 +44,9 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 #treeZoom button{border:1px solid var(--line);background:#fff;border-radius:8px;font-size:12px;padding:2px 8px;cursor:pointer;color:var(--mut);font-family:inherit}
 #treeZoom button:hover{color:var(--acc);border-color:var(--acc)}
 #treeZoom button[data-z="reset"]{min-width:46px}
-#canvasGrip{position:absolute;right:10px;bottom:10px;width:26px;height:26px;border-radius:50%;background:var(--card);border:1px solid var(--line);color:var(--mut);font-size:14px;display:none;align-items:center;justify-content:center;cursor:nwse-resize;z-index:5;box-shadow:0 2px 10px rgba(91,138,176,.15);user-select:none;-webkit-user-select:none}
-#canvasGrip:hover{color:var(--acc);border-color:var(--acc)}
+#treeResize{position:absolute;top:0;right:-5px;width:11px;height:100%;cursor:ew-resize;z-index:6;display:none}
+#treeResize::after{content:'';position:absolute;top:0;bottom:0;left:4px;width:3px;border-radius:2px;background:transparent;transition:background .15s}
+#treeResize:hover::after{background:var(--acc)}
 .tnode span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tree .hd{display:flex;align-items:center;gap:8px}
 #treeTog{margin-left:auto;display:flex;gap:4px}
@@ -145,7 +146,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 </div>
 <div id="main">
 <div id="tree"><div class="hd">树<span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span><span id="treeZoom"><button data-z="out">−</button><button data-z="reset">100%</button><button data-z="in">＋</button></span></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div>
-<div id="canvasGrip" title="拖动扩大画布">⤡</div></div>
+<div id="treeResize" title="拖动调整树栏宽度（双击复位）"></div></div>
 <div id="center">
 <div id="tabs"></div>
 <div id="cv">
@@ -204,10 +205,11 @@ function openNode(n){if(!n)return;const ensure=(x)=>{let t=tabs.find(y=>y.nodeId
  switchTab(t)}
 let treeMode='graph';
 let treeZoom=1,suppressClick=false;
-let canvasPad={w:0,h:0},canvasBase={w:200,h:40};
-function sizeCanvas(){const svg=document.getElementById('treeGraph');
- svg.setAttribute('width',(canvasBase.w+canvasPad.w)*treeZoom);
- svg.setAttribute('height',(canvasBase.h+canvasPad.h)*treeZoom)}
+let treeWUser=null;
+function treeW(){return treeWUser!=null?treeWUser:(treeMode==='graph'?340:250)}
+function syncTreeWidth(){const t=document.getElementById('tree'),h=document.getElementById('treeResize');
+ if(!panels.tree){t.style.width='';h.style.display='none';return}
+ t.style.width=treeW()+'px';h.style.display='block'}
 const _mc=document.createElement('canvas').getContext('2d');_mc.font='12px system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 function treeLabel(n){return n.title.length>12?n.title.slice(0,12)+'…':n.title}
 function treeKids(){const kids={};nodesCache.forEach(n=>{const k=n.parent_id||'';(kids[k]=kids[k]||[]).push(n)});return kids}
@@ -219,7 +221,7 @@ function renderTree(){
  document.getElementById('treeScroll').classList.toggle('dots',treeMode==='graph');
  document.getElementById('treeZoom').style.display=treeMode==='graph'?'flex':'none';
  document.querySelector('#treeZoom button[data-z="reset"]').textContent=Math.round(treeZoom*100)+'%';
- document.getElementById('canvasGrip').style.display=treeMode==='graph'?'flex':'none';
+ syncTreeWidth();
  if(treeMode==='list')renderTreeList();else renderTreeGraph()}
 function renderTreeList(){const L=document.getElementById('treeList');L.innerHTML='';
  if(!nodesCache.length){const e=document.createElement('div');e.style.cssText='padding:8px 11px;font-size:13px;color:var(--mut)';e.textContent='还没有对话';L.appendChild(e);return}
@@ -244,7 +246,7 @@ function renderTreeGraph(){const NS='http://www.w3.org/2000/svg';const svg=docum
  let xx=14;const pos={};
  order.forEach(o=>{const w=W(o.n);pos[o.n.id]={x:xx,w:w,depth:o.depth};xx+=w+GAP});
  const Wd=xx-GAP+14,H=maxD*LH+76;
- canvasBase={w:Wd,h:H};sizeCanvas();
+ svg.setAttribute('width',Wd*treeZoom);svg.setAttribute('height',H*treeZoom);
  vp.setAttribute('transform','scale('+treeZoom+')');
  const Y=d=>H-30-d*LH;
  const line=d=>{const pa=document.createElementNS(NS,'path');pa.setAttribute('d',d);
@@ -553,7 +555,7 @@ function syncPanels(){document.querySelectorAll('#side button[data-m]').forEach(
  document.getElementById('tabs').style.display=panels.chat?'flex':'none';
  document.getElementById('clist').style.display=panels.chat?'flex':'none';
  document.getElementById('notes').style.display=panels.note?'flex':'none';
- document.getElementById('tree').classList.toggle('open',panels.tree);
+ document.getElementById('tree').classList.toggle('open',panels.tree);syncTreeWidth();
  if(panels.note)renderNotes();if(panels.tree)renderTree()}
 function setModule(m){if(m)panels[m]=true;syncPanels()}
 document.querySelectorAll('#side button').forEach(b=>b.onclick=(e)=>{
@@ -577,11 +579,12 @@ function wireGraphPan(){const svg=document.getElementById('treeGraph');const sc=
  svg.onwheel=(e)=>{e.preventDefault();zoomGraph(Math.exp(-e.deltaY*0.0015))};
  svg.ondblclick=(e)=>{if(e.target.closest&&e.target.closest('.tn'))return;treeZoom=1;renderTree()}}
 wireGraphPan();
-function wireGrip(){const g=document.getElementById('canvasGrip');if(!g||g._wired)return;g._wired=true;
- g.onpointerdown=(e)=>{e.stopPropagation();e.preventDefault();g._st={x:e.clientX,y:e.clientY,w:canvasPad.w,h:canvasPad.h};try{g.setPointerCapture(e.pointerId)}catch(_){}};
- g.onpointermove=(e)=>{const st=g._st;if(!st)return;canvasPad.w=Math.min(2400,Math.max(0,st.w+(e.clientX-st.x)));canvasPad.h=Math.min(2400,Math.max(0,st.h+(e.clientY-st.y)));sizeCanvas()};
- const end=()=>{g._st=null};g.onpointerup=end;g.onpointercancel=end}
-wireGrip();
+function wireTreeResize(){const h=document.getElementById('treeResize');if(!h||h._wired)return;h._wired=true;
+ h.onpointerdown=(e)=>{e.stopPropagation();e.preventDefault();h._st={x:e.clientX,w:treeW()};document.getElementById('tree').style.transition='none';try{h.setPointerCapture(e.pointerId)}catch(_){}};
+ h.onpointermove=(e)=>{const st=h._st;if(!st)return;treeWUser=Math.min(innerWidth-120,Math.max(180,st.w+(e.clientX-st.x)));syncTreeWidth()};
+ const end=()=>{h._st=null;document.getElementById('tree').style.transition=''};h.onpointerup=end;h.onpointercancel=end;
+ h.ondblclick=()=>{treeWUser=null;syncTreeWidth()}}
+wireTreeResize();
 const selNodes=new Set();
 function toggleSel(id){if(selNodes.has(id))selNodes.delete(id);else selNodes.add(id);syncBatchbar();renderTree()}
 function subtreeIds(id){const kids=treeKids();const out=[];const walk=(x)=>{out.push(x);(kids[x]||[]).forEach(y=>walk(y.id))};walk(id);return out}
