@@ -318,6 +318,12 @@ check(r.status_code == 200 and r.json()["start"] == 0, "划线落库")
 ov_id = r.json()["id"]
 got = c.get("/api/nodes/%s/overlays" % ov_root).json()["overlays"]
 check(any(o["id"] == ov_id for o in got), "标色可取回")
+midU = [m for m in ov_msgs if m["role"] == "user"][0]
+r = c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midU["id"], "kind": "ul", "start": 0, "end": min(2, len(midU["content"])), "color": "#f5d90a"})
+check(r.status_code == 200, "用户消息可划线")
+check("send.busy" in INK, "发送重入锁")
+check("first&&t0.nodeId" in INK, "命名守卫空节点")
+check("ct.parent={tab:pt}" in INK, "祖链贯通")
 check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "xx", "start": 0, "end": 1, "color": "#f5d90a"}).status_code == 400, "坏kind400")
 check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "ul", "start": 0, "end": 1, "color": "red"}).status_code == 400, "坏色400")
 check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "ul", "start": 5, "end": 2, "color": "#f5d90a"}).status_code == 400, "倒挂400")

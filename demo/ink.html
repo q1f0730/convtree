@@ -212,8 +212,8 @@ function openNode(n){if(!n)return;const ensure=(x)=>{let t=tabs.find(y=>y.nodeId
  if(!t){t={id:++tabSeq,nodeId:x.id,name:x.title,parent:null,color:x.color,msgs:null};tabs.push(t)}
  return t};
  const t=ensure(n);
- if(n.parent_id){const p=nodesCache.find(x=>x.id===n.parent_id);
-  if(p)t.parent={tab:ensure(p)}}
+ let cn=n,ct=t,guard=0;
+ while(cn.parent_id&&guard++<50){const p=nodesCache.find(x=>x.id===cn.parent_id);if(!p)break;const pt=ensure(p);ct.parent={tab:pt};ct=pt;cn=p}
  switchTab(t)}
 let treeMode='graph';
 let treeZoom=1,suppressClick=false;
@@ -481,6 +481,8 @@ async function refreshMsgs(t){t=t||cur;if(!t||!t.nodeId)return;
  try{t.msgs=await fetchMsgs(t.nodeId);if(t===cur)renderMsgs()}catch(_){}
  renderTree();refreshRoots()}
 async function send(text){text=(text||'').trim();if(!text)return;
+ if(send.busy){toast('等上一条生成完再发');return}
+ send.busy=true;
  if(!cur){cur={id:++tabSeq,nodeId:null,name:'未命名',parent:null,color:null,msgs:[]};tabs.push(cur);renderTabs()}
  const first=cur.msgs!==null&&cur.msgs.length===0;
  if(cur.msgs===null)cur.msgs=[];
@@ -491,8 +493,8 @@ async function send(text){text=(text||'').trim();if(!text)return;
  M.scrollTop=M.scrollHeight;
  let resp;
  try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:t0.nodeId})})}
- catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';return}
- if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);return}
+ catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';send.busy=false;return}
+ if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);send.busy=false;return}
  const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null;
  try{
  for(;;){const r=await rd.read();if(r.done)break;buf+=dec.decode(r.value,{stream:true});
@@ -502,16 +504,16 @@ async function send(text){text=(text||'').trim();if(!text)return;
    if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;if(t0===cur){ab.innerHTML=md(full)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}}
    else if(m[1]==='done'){doneId=d.nodeId}}}
  }catch(e){ab.textContent='（读取中断：'+e.message+'，本轮已落库，切出去再回来可看）';
-  t0.msgs.push({role:'a',text:ab.textContent});renderTree();refreshRoots();return}
+  t0.msgs.push({role:'a',text:ab.textContent});renderTree();refreshRoots();send.busy=false;return}
  ab.classList.remove('is-thinking');
  if(doneId)t0.nodeId=doneId;
  if(full&&t0===cur)ab.innerHTML=md(full);
  if(!full){full=ab.textContent&&ab.textContent!=='…'?ab.textContent:'（空回复：模型什么都没返回）';ab.innerHTML=md(full)}
  await refreshMsgs(t0);
  if(!t0.msgs.length){t0.msgs.push({role:'a',text:full||'（空回复：模型什么都没返回）'});if(t0===cur)renderMsgs()}
- if(first){t0.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
+ if(first&&t0.nodeId){t0.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
   fetch('/api/nodes/'+t0.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
-   if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}}
+   if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}send.busy=false}
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
  if(!box.contains(r.commonAncestorContainer))return null;return{range:r,text:s.toString()}}
