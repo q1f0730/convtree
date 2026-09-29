@@ -344,7 +344,7 @@ function startRename(d,t){if(d.querySelector('input'))return;
  d.innerHTML='';d.appendChild(inp);inp.focus();inp.select();
  let done=false;const commit=(ok)=>{if(done)return;done=true;
   if(ok&&inp.value.trim())renameTab(t,inp.value.trim());else{renderTabs();renderTree()}};
- inp.onkeydown=(e)=>{if(e.key==='Enter')commit(true);else if(e.key==='Escape')commit(false);e.stopPropagation()};
+ inp.onkeydown=(e)=>{if(e.key==='Enter'&&!e.isComposing)commit(true);else if(e.key==='Escape')commit(false);e.stopPropagation()};
  inp.onblur=()=>commit(true);inp.onclick=(e)=>e.stopPropagation()}
 async function renameTab(t,name){t.userNamed=true;if(!t.nodeId){t.name=name;renderTabs();renderTree();return}
  try{const r=await fetch('/api/nodes/'+t.nodeId+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name})});
@@ -722,9 +722,9 @@ function closeTabsByIds(set){let ch=false;for(let i=tabs.length-1;i>=0;i--){if(s
 document.addEventListener('click',e=>{if(!e.target.closest('#treemenu'))hideTreeMenu()});
 document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const dr=document.getElementById('drawer');if(dr.classList.contains('open')){dr.classList.remove('open');return}if(selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
 document.getElementById('send').onclick=()=>{send(document.getElementById('q').value);document.getElementById('q').value=''};
-document.getElementById('q').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send').click()};
+document.getElementById('q').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};
-document.getElementById('q2').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send2').click()};
+document.getElementById('q2').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)document.getElementById('send2').click()};
 document.getElementById('backBtn').onclick=()=>{if(!cur)return;
  const pt=cur.parent?cur.parent.tab:null;
  if(pt&&tabs.includes(pt)){switchTab(pt);return}
