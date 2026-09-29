@@ -309,9 +309,9 @@ function startRename(d,t){if(d.querySelector('input'))return;
  inp.onblur=()=>commit(true);inp.onclick=(e)=>e.stopPropagation()}
 async function renameTab(t,name){t.userNamed=true;if(!t.nodeId){t.name=name;renderTabs();renderTree();return}
  try{const r=await fetch('/api/nodes/'+t.nodeId+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name})});
-  if(!r.ok)throw new Error((await r.text()).slice(0,120));t.name=name;renderTabs();renderTree()}
+  if(!r.ok)throw new Error((await r.text()).slice(0,120));t.name=name;renderTabs();renderTree();refreshRoots()}
  catch(e){toast('改名失败：'+e.message)}}
-function switchTab(t){cur=t;renderTabs();renderTree();refreshRoots();switchTabMsgs(t)}
+function switchTab(t){cur=t;hideTreeMenu();hideFmtMenu();document.getElementById('menu').style.display='none';renderTabs();renderTree();refreshRoots();switchTabMsgs(t)}
 function refreshRoots(){fetch('/api/nodes').then(r=>r.json()).then(d=>{nodesCache=d.nodes||[];renderRoots(nodesCache);renderTree()}).catch(()=>{})}
 function fmtTime(ms){const d=new Date(ms);const p=n=>String(n).padStart(2,'0');return (d.getMonth()+1)+'-'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function curRootId(){if(!cur||!cur.nodeId)return null;const byId={};nodesCache.forEach(n=>byId[n.id]=n);
@@ -431,8 +431,8 @@ async function fetchMsgs(nodeId){const gm=fetch('/api/nodes/'+nodeId+'/messages'
  const go=fetch('/api/nodes/'+nodeId+'/overlays').then(r=>{if(!r.ok)throw 0;return r.json()}).catch(()=>({overlays:[]}));
  const d=await gm,o=await go;
  return attachOvs((d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content,mid:m.id})),o.overlays,nodeId)}
-async function refreshMsgs(){if(!cur||!cur.nodeId)return;
- try{cur.msgs=await fetchMsgs(cur.nodeId);renderMsgs()}catch(_){}
+async function refreshMsgs(t){t=t||cur;if(!t||!t.nodeId)return;
+ try{t.msgs=await fetchMsgs(t.nodeId);if(t===cur)renderMsgs()}catch(_){}
  renderTree();refreshRoots()}
 function streamInto(el,full,done){let i=0;el.textContent='';
  (function tick(){i+=2;el.textContent=full.slice(0,i);
@@ -440,13 +440,15 @@ function streamInto(el,full,done){let i=0;el.textContent='';
   if(i<full.length)setTimeout(tick,12);else done&&done()})()}
 async function send(text){text=(text||'').trim();if(!text)return;
  if(!cur){cur={id:++tabSeq,nodeId:null,name:'未命名',parent:null,color:null,msgs:[]};tabs.push(cur);renderTabs()}
- const first=cur.msgs.length===0;
- cur.msgs.push({role:'u',text});renderMsgs();
+ const first=cur.msgs!==null&&cur.msgs.length===0;
+ if(cur.msgs===null)cur.msgs=[];
+ const t0=cur;
+ t0.msgs.push({role:'u',text});renderMsgs();
  const M=document.getElementById('msgs');
  const ab=document.createElement('div');ab.className='msg-a is-thinking';ab.innerHTML='<div class="thinking"><span></span><span></span><span></span></div>';M.appendChild(ab);
  M.scrollTop=M.scrollHeight;
  let resp;
- try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:cur.nodeId})})}
+ try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:t0.nodeId})})}
  catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';return}
  if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);return}
  const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null;
@@ -455,19 +457,19 @@ async function send(text){text=(text||'').trim();if(!text)return;
   const parts=buf.split('\n\n');buf=parts.pop();
   for(const p of parts){const m=p.match(/^event: (\w+)\ndata: ([\s\S]*)$/);if(!m)continue;
    let d;try{d=JSON.parse(m[2])}catch(_){continue}
-   if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;ab.innerHTML=md(full)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}
+   if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;if(t0===cur){ab.innerHTML=md(full)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}}
    else if(m[1]==='done'){doneId=d.nodeId}}}
  }catch(e){ab.textContent='（读取中断：'+e.message+'，本轮已落库，切出去再回来可看）';
-  cur.msgs.push({role:'a',text:ab.textContent});renderTree();refreshRoots();return}
+  t0.msgs.push({role:'a',text:ab.textContent});renderTree();refreshRoots();return}
  ab.classList.remove('is-thinking');
- if(doneId)cur.nodeId=doneId;
- if(full)ab.innerHTML=md(full);
+ if(doneId)t0.nodeId=doneId;
+ if(full&&t0===cur)ab.innerHTML=md(full);
  if(!full){full=ab.textContent&&ab.textContent!=='…'?ab.textContent:'（空回复：模型什么都没返回）';ab.innerHTML=md(full)}
- await refreshMsgs();
- if(!cur.msgs.length){cur.msgs.push({role:'a',text:full||'（空回复：模型什么都没返回）'});renderMsgs()}
- if(first){cur.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
-  fetch('/api/nodes/'+cur.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
-   if(d&&d.title&&!cur.userNamed){cur.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}}
+ await refreshMsgs(t0);
+ if(!t0.msgs.length){t0.msgs.push({role:'a',text:full||'（空回复：模型什么都没返回）'});if(t0===cur)renderMsgs()}
+ if(first){t0.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
+  fetch('/api/nodes/'+t0.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
+   if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}}
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
  if(!box.contains(r.commonAncestorContainer))return null;return{range:r,text:s.toString()}}
@@ -511,6 +513,7 @@ function showFmtMenu(){resetFmt();const M=document.getElementById('fmtmenu');M.i
 document.getElementById('fmtmenu').addEventListener('click',e=>e.stopPropagation());
 document.addEventListener('click',e=>{if(!e.target.closest('#fmtmenu'))hideFmtMenu()});
 async function textAct(act,info){
+ if(!cur){toast('先开一个对话');return}
  const txt=info.text;
  if(act==='copy'){navigator.clipboard&&navigator.clipboard.writeText(txt);toast('已复制')}
  else if(act==='ul'){const bm=bubbleMid(info.range);const m=bm&&bm.mid&&findMsg(bm.mid);
