@@ -65,6 +65,12 @@ body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-se
 @keyframes breathe{0%,100%{box-shadow:0 6px 28px rgba(91,138,176,.09)}50%{box-shadow:0 6px 34px rgba(91,138,176,.22)}}
 .caret{display:inline-block;width:2px;height:1.05em;background:var(--acc);vertical-align:text-bottom;margin-left:3px;border-radius:1px;animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
+*{scrollbar-width:thin;scrollbar-color:#c3cfdd transparent}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background-color:#c3cfdd;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-thumb:hover{background-color:#9db4c9;border:3px solid transparent;background-clip:content-box}
+*::-webkit-scrollbar-button{display:none;width:0;height:0}
 mark.hl{background:transparent;border-radius:3px;padding:0 2px;box-shadow:inset 0 -0.62em var(--mk,rgba(91,138,176,.28))}
 u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding-bottom:10vh}

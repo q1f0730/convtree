@@ -350,6 +350,7 @@ check(not any(e in INK for e in ["💬", "📝", "🌳", "⚙"]), "无emoji图�
 check(INK.count("border-right:1px solid var(--line)") >= 3, "栏间右分界")
 check("#tabs::after" in INK, "标签栏filler线")
 check("overflow-y:hidden" in INK, "禁标签竖滚动条")
+check("::-webkit-scrollbar-thumb" in INK and "scrollbar-button" in INK, "自定义滚动条")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
