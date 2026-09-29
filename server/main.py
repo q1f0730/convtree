@@ -9,6 +9,7 @@ from __future__ import print_function
 import asyncio
 import json
 import os
+import subprocess
 import sys
 
 from fastapi import FastAPI, HTTPException
@@ -22,6 +23,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server import llm, settings as app_settings, store  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _build_tag():
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=5, cwd=ROOT)
+        return (out.stdout or "").strip() or "dev"
+    except Exception:
+        return "dev"
+
+
+BUILD = _build_tag()
 
 app = FastAPI(title="深挖", version="0.1.0")
 app.add_middleware(CORSMiddleware,
@@ -114,6 +127,11 @@ class SettingsIn(BaseModel):
 @app.get("/api/health")
 def health():
     return {"ok": True, "db": store.DB_PATH, "llm": llm.describe()}
+
+
+@app.get("/api/version")
+def version():
+    return {"build": BUILD}
 
 
 @app.get("/api/settings")
