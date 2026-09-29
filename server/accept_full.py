@@ -202,7 +202,9 @@ rp = subprocess.run([sys.executable, "tools/check_invariants.py", "--all"], capt
 check(rp.returncode == 0, "全仓扫描0")
 rp = subprocess.run([sys.executable, "tools/check_invariants.py", "--fixtures"], capture_output=True, cwd=ROOT)
 check(rp.returncode == 0, "对照自测0")
-check("concept" not in MAIN_SRC and "note" not in MAIN_SRC.replace("denote", ""), "上下文无图谱笔记")
+_seg = MAIN_SRC.split("def build_context")[1]
+_seg = _seg[:_seg.index("\n\ndef ")] if "\n\ndef " in _seg else _seg
+check("concept" not in MAIN_SRC and "overlay" not in _seg and "note" not in _seg, "上下文无杂物")
 check("PRAGMA foreign_keys=ON" in STORE_SRC, "外键pragma")
 
 # ── 前端静态 81-100 ──
@@ -305,6 +307,38 @@ r = c.post("/api/nodes/%s/delete" % del_root)
 check(r.status_code == 200 and r.json()["deleted"] == [del_root], "删根对话")
 check(del_root not in [n["id"] for n in c.get("/api/nodes").json()["nodes"]], "根从列表消失")
 check('删除该对话' in INK, "侧栏右键删对话")
+# ── 标色与笔记落库 ──
+r = c.post("/api/chat", json={"text": "标色测试Hello世界"})
+ov_root = sse_done(r.text)["nodeId"]
+ov_msgs = c.get("/api/nodes/%s/messages" % ov_root).json()["messages"]
+midA = [m for m in ov_msgs if m["role"] == "assistant"][0]
+alen = len(midA["content"])
+r = c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "ul", "start": 0, "end": min(4, alen), "color": "#f5d90a"})
+check(r.status_code == 200 and r.json()["start"] == 0, "划线落库")
+ov_id = r.json()["id"]
+got = c.get("/api/nodes/%s/overlays" % ov_root).json()["overlays"]
+check(any(o["id"] == ov_id for o in got), "标色可取回")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "xx", "start": 0, "end": 1, "color": "#f5d90a"}).status_code == 400, "坏kind400")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "ul", "start": 0, "end": 1, "color": "red"}).status_code == 400, "坏色400")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "ul", "start": 5, "end": 2, "color": "#f5d90a"}).status_code == 400, "倒挂400")
+check(c.post("/api/overlays", json={"nodeId": ov_root, "messageId": midA["id"], "kind": "ul", "start": 0, "end": alen + 100, "color": "#f5d90a"}).status_code == 400, "越界400")
+check(c.post("/api/overlays", json={"nodeId": del_root, "messageId": midA["id"], "kind": "ul", "start": 0, "end": 1, "color": "#f5d90a"}).status_code in (400, 404), "串节点拒绝")
+check(c.post("/api/overlays", json={"nodeId": "nd_nope", "messageId": midA["id"], "kind": "ul", "start": 0, "end": 1, "color": "#f5d90a"}).status_code == 404, "坏点叠加404")
+check(c.get("/api/nodes/nd_nope/overlays").status_code == 404, "坏点取色404")
+ctx = build_context(ov_root)
+check(ctx == [{"role": m["role"], "content": m["content"]} for m in store_mod.list_messages(ov_root)], "标色不进上下文")
+r = c.post("/api/notes", json={"text": "  笔记一  ", "fromNode": ov_root, "fromName": "t"})
+check(r.status_code == 200 and r.json()["text"] == "笔记一", "笔记落库去空白")
+check(c.post("/api/notes", json={"text": "   "}).status_code == 400, "空笔记400")
+c.post("/api/notes", json={"text": "笔记二"})
+nl = c.get("/api/notes").json()["notes"]
+check([n["text"] for n in nl[:2]] == ["笔记二", "笔记一"], "笔记倒序")
+ctx2 = build_context(ov_root)
+check(ctx2 == [{"role": m["role"], "content": m["content"]} for m in store_mod.list_messages(ov_root)], "笔记不进上下文")
+check("mdOv" in INK and "rangeToSrc" in INK and "attachOvs" in INK, "坐标引擎")
+check("dataset.mid" in INK and "/api/overlays" in INK and "/api/notes" in INK, "落库接线")
+check("readBack" not in INK and "wrapRange" not in INK, "DOM外挂退役")
+check("('tabs').style.display=panels.chat" in INK, "标签跟聊天走")
 check('class="sheet"' in INK and "backdrop-filter" in INK, "设置独立页")
 check("target.id==='drawer'" in INK, "点空白关设置")
 check(len(store_mod.list_messages(del_gr)) == 2, "消息行冻结保留")

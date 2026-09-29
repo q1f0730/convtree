@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -31,6 +32,25 @@ CREATE TABLE IF NOT EXISTS message (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_msg_node ON message(node_id, created_at);
+CREATE TABLE IF NOT EXISTS overlay (
+  id         TEXT PRIMARY KEY,
+  node_id    TEXT NOT NULL REFERENCES node(id),
+  message_id TEXT NOT NULL REFERENCES message(id),
+  kind       TEXT NOT NULL,
+  start      INTEGER NOT NULL,
+  end_pos    INTEGER NOT NULL,
+  color      TEXT,
+  ref_node   TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ov_node ON overlay(node_id);
+CREATE TABLE IF NOT EXISTS note (
+  id         TEXT PRIMARY KEY,
+  text       TEXT NOT NULL,
+  from_node  TEXT,
+  from_name  TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
 """
 
 
@@ -143,6 +163,72 @@ def rename_node(node_id, title):
     finally:
         conn.close()
     return {"id": node_id, "title": title.strip()}
+
+
+_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def add_overlay(node_id, message_id, kind, start, end, color, ref_node=None):
+    """标色外挂层（D-103）：start/end = 消息原文字符偏移；原文一字不动。"""
+    if kind not in ("mark", "ul"):
+        raise ValueError("kind 非法")
+    if not _COLOR.match(color or ""):
+        raise ValueError("color 非法")
+    conn = connect()
+    try:
+        if not conn.execute("SELECT 1 FROM node WHERE id=? AND deleted=0", (node_id,)).fetchone():
+            raise LookupError("节点不存在")
+        mrow = conn.execute("SELECT content FROM message WHERE id=? AND node_id=?",
+                            (message_id, node_id)).fetchone()
+        if not mrow:
+            raise LookupError("消息不存在")
+        size = len(mrow["content"] or "")
+        if (not isinstance(start, int) or not isinstance(end, int)
+                or isinstance(start, bool) or isinstance(end, bool)
+                or not (0 <= start < end <= size)):
+            raise ValueError("偏移越界")
+        oid, ts = uid("ov"), now_ms()
+        conn.execute("INSERT INTO overlay(id,node_id,message_id,kind,start,end_pos,color,ref_node,created_at)"
+                     " VALUES(?,?,?,?,?,?,?,?,?)",
+                     (oid, node_id, message_id, kind, start, end, color, ref_node, ts))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": oid, "node_id": node_id, "message_id": message_id, "kind": kind,
+            "start": start, "end": end, "color": color, "ref_node": ref_node}
+
+
+def list_overlays(node_id):
+    conn = connect()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT id,node_id,message_id,kind,start,end_pos AS \"end\",color,ref_node,created_at"
+            " FROM overlay WHERE node_id=? ORDER BY created_at", (node_id,))]
+    finally:
+        conn.close()
+
+
+def add_note(text, from_node=None, from_name=""):
+    if not (text or "").strip():
+        raise ValueError("内容为空")
+    nid, ts = uid("note"), now_ms()
+    conn = connect()
+    try:
+        conn.execute("INSERT INTO note(id,text,from_node,from_name,created_at) VALUES(?,?,?,?,?)",
+                     (nid, text.strip(), from_node, from_name or "", ts))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": nid, "text": text.strip(), "from_node": from_node,
+            "from_name": from_name or "", "created_at": ts}
+
+
+def list_notes():
+    conn = connect()
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM note ORDER BY created_at DESC")]
+    finally:
+        conn.close()
 
 
 def delete_subtree(node_id):

@@ -73,6 +73,22 @@ class RenameIn(BaseModel):
     title: str
 
 
+class OverlayIn(BaseModel):
+    nodeId: str
+    messageId: str
+    kind: str
+    start: int
+    end: int
+    color: str | None = None
+    refNode: str | None = None
+
+
+class NoteIn(BaseModel):
+    text: str
+    fromNode: str | None = None
+    fromName: str | None = None
+
+
 class SettingsIn(BaseModel):
     provider: str | None = None
     baseUrl: str | None = None
@@ -179,6 +195,38 @@ def delete_node(node_id: str):
     except LookupError as exc:
         raise HTTPException(404, str(exc))
     return {"deleted": ids, "count": len(ids)}
+
+
+@app.post("/api/overlays")
+def post_overlay(body: OverlayIn):
+    """标色外挂层落库（D-103 偏移；D-101：只 INSERT，不过原文）。"""
+    try:
+        return store.add_overlay(body.nodeId, body.messageId, body.kind,
+                                 body.start, body.end, body.color, body.refNode)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/nodes/{node_id}/overlays")
+def node_overlays(node_id: str):
+    if not store.node_path(node_id):
+        raise HTTPException(404, "节点不存在")
+    return {"overlays": store.list_overlays(node_id)}
+
+
+@app.post("/api/notes")
+def post_note(body: NoteIn):
+    try:
+        return store.add_note(body.text, body.fromNode, body.fromName or "")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/notes")
+def get_notes():
+    return {"notes": store.list_notes()}
 
 
 @app.post("/api/branch")
