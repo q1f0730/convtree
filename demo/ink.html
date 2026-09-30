@@ -382,7 +382,7 @@ function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  M.scrollTop=M.scrollHeight}
 function bubble(m){const d=document.createElement('div');d.className=m.role==='u'?'msg-u':'msg-a';
  if(m.mid)d.dataset.mid=m.mid;
- if(m.role==='a')d.innerHTML=mdOv(m.text,m.ov);else d.textContent=m.text;return d}
+ if(m.role==='a'){d.innerHTML=mdOv(m.text,m.ov);if(isFailText(m.text))addResend(d,lastUserText)}else d.textContent=m.text;return d}
 function md(s){s=String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
  const code=[];s=s.replace(/```(\w*)\n([\s\S]*?)(```|$)/g,(m,l,c)=>{code.push('<pre style="background:#f0ebe0;border-radius:8px;padding:10px 12px;overflow-x:auto;font-size:13px">'+c.replace(/\n$/,'')+'</pre>');return '\u0000'+(code.length-1)+'\u0000'});
  const rows=s.split('\n');let h='',list=null;
@@ -480,9 +480,14 @@ async function fetchMsgs(nodeId){const gm=fetch('/api/nodes/'+nodeId+'/messages'
 async function refreshMsgs(t){t=t||cur;if(!t||!t.nodeId)return;
  try{t.msgs=await fetchMsgs(t.nodeId);if(t===cur)renderMsgs()}catch(_){}
  renderTree();refreshRoots()}
+function setSendLock(on){['q','q2','send','send2'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=on})}
+function lastUserText(){if(!cur||!cur.msgs)return '';for(let i=cur.msgs.length-1;i>=0;i--){if(cur.msgs[i].role==='u')return cur.msgs[i].text}return ''}
+function isFailText(t){t=String(t||'');return t.indexOf('（连不上后端')===0||t.indexOf('（读取中断')===0||t.indexOf('（空回复')===0||/^（\d{3}）/.test(t)}
+function addResend(el,fn){const b=document.createElement('button');b.className='resend';b.textContent='重发';b.style.cssText='margin-top:6px;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--card);cursor:pointer';b.onclick=()=>{const t=fn();if(t)send(t)};el.appendChild(b)}
 async function send(text){text=(text||'').trim();if(!text)return;
  if(send.busy){toast('等上一条生成完再发');return}
  send.busy=true;
+ setSendLock(true);
  if(!cur){cur={id:++tabSeq,nodeId:null,name:'未命名',parent:null,color:null,msgs:[]};tabs.push(cur);renderTabs()}
  const first=cur.msgs!==null&&cur.msgs.length===0;
  if(cur.msgs===null)cur.msgs=[];
@@ -493,8 +498,8 @@ async function send(text){text=(text||'').trim();if(!text)return;
  M.scrollTop=M.scrollHeight;
  let resp;
  try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:t0.nodeId})})}
- catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';send.busy=false;return}
- if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);send.busy=false;return}
+ catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
+ if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
  const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null;
  try{
  for(;;){const r=await rd.read();if(r.done)break;buf+=dec.decode(r.value,{stream:true});
@@ -504,7 +509,7 @@ async function send(text){text=(text||'').trim();if(!text)return;
    if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;if(t0===cur){ab.innerHTML=md(full)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}}
    else if(m[1]==='done'){doneId=d.nodeId}}}
  }catch(e){ab.textContent='（读取中断：'+e.message+'，本轮已落库，切出去再回来可看）';
-  t0.msgs.push({role:'a',text:ab.textContent});renderTree();refreshRoots();send.busy=false;return}
+  t0.msgs.push({role:'a',text:ab.textContent});addResend(ab,()=>text);renderTree();refreshRoots();send.busy=false;setSendLock(false);return}
  ab.classList.remove('is-thinking');
  if(doneId)t0.nodeId=doneId;
  if(full&&t0===cur)ab.innerHTML=md(full);
@@ -513,7 +518,7 @@ async function send(text){text=(text||'').trim();if(!text)return;
  if(!t0.msgs.length){t0.msgs.push({role:'a',text:full||'（空回复：模型什么都没返回）'});if(t0===cur)renderMsgs()}
  if(first&&t0.nodeId){t0.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
   fetch('/api/nodes/'+t0.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
-   if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}send.busy=false}
+   if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}send.busy=false;setSendLock(false)}
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
  if(!box.contains(r.commonAncestorContainer))return null;return{range:r,text:s.toString()}}
