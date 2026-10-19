@@ -17,3 +17,6 @@ tools/_decision_request.json
 
 # 环境变量文件：真正的密钥应存到用户配置目录，而不是这里
 .env
+
+# 本地运行日志
+*.log

@@ -53,6 +53,21 @@ CREATE TABLE IF NOT EXISTS note (
   from_name  TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS project (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS source (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES project(id),
+  name       TEXT NOT NULL,
+  content    TEXT NOT NULL,
+  type       TEXT NOT NULL DEFAULT 'text',
+  size       INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_source_project ON source(project_id);
 """
 
 
@@ -74,6 +89,8 @@ def init_db():
         cols = [r[1] for r in conn.execute("PRAGMA table_info(node)")]
         if "deleted" not in cols:  # 老库迁移：删整支用的软删除标
             conn.execute("ALTER TABLE node ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+        if "project_id" not in cols:  # 老库迁移：会话归属项目
+            conn.execute("ALTER TABLE node ADD COLUMN project_id TEXT")
         ocols = [r[1] for r in conn.execute("PRAGMA table_info(overlay)")]
         if ocols and "value" not in ocols:  # 老库迁移：style 格式值
             conn.execute("ALTER TABLE overlay ADD COLUMN value TEXT")
@@ -90,20 +107,20 @@ def now_ms():
     return int(time.time() * 1000)
 
 
-def create_node(parent_id, title, anchor_text=None, color=None):
+def create_node(parent_id, title, anchor_text=None, color=None, project_id=None):
     nid, ts = uid("nd"), now_ms()
     conn = connect()
     try:
         if parent_id and not conn.execute(
                 "SELECT 1 FROM node WHERE id=? AND deleted=0", (parent_id,)).fetchone():
             raise LookupError("父节点不存在")
-        conn.execute("INSERT INTO node(id,parent_id,title,anchor_text,color,created_at) VALUES(?,?,?,?,?,?)",
-                     (nid, parent_id, title, anchor_text, color, ts))
+        conn.execute("INSERT INTO node(id,parent_id,title,anchor_text,color,project_id,created_at) VALUES(?,?,?,?,?,?,?)",
+                     (nid, parent_id, title, anchor_text, color, project_id, ts))
         conn.commit()
     finally:
         conn.close()
     return {"id": nid, "parent_id": parent_id, "title": title,
-            "anchor_text": anchor_text, "color": color}
+            "anchor_text": anchor_text, "color": color, "project_id": project_id}
 
 
 def list_nodes():
@@ -320,3 +337,108 @@ def delete_subtree(node_id):
     finally:
         conn.close()
     return ids
+
+
+def create_project(name):
+    if not (name or "").strip():
+        raise ValueError("名称为空")
+    pid, ts = uid("prj"), now_ms()
+    conn = connect()
+    try:
+        conn.execute("INSERT INTO project(id,name,created_at) VALUES(?,?,?)",
+                     (pid, name.strip(), ts))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": pid, "name": name.strip(), "created_at": ts}
+
+
+def list_projects():
+    conn = connect()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM project ORDER BY created_at")]
+    finally:
+        conn.close()
+
+
+def rename_project(project_id, name):
+    if not (name or "").strip():
+        raise ValueError("名称为空")
+    conn = connect()
+    try:
+        cur = conn.execute("UPDATE project SET name=? WHERE id=?", (name.strip(), project_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise LookupError("项目不存在")
+    finally:
+        conn.close()
+    return {"id": project_id, "name": name.strip()}
+
+
+def delete_project(project_id):
+    conn = connect()
+    try:
+        if not conn.execute("SELECT 1 FROM project WHERE id=?", (project_id,)).fetchone():
+            raise LookupError("项目不存在")
+        conn.execute("DELETE FROM source WHERE project_id=?", (project_id,))
+        conn.execute("UPDATE node SET project_id=NULL WHERE project_id=?", (project_id,))
+        conn.execute("DELETE FROM project WHERE id=?", (project_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": project_id}
+
+
+def add_source(project_id, name, content, type="text", size=0):
+    if not (name or "").strip():
+        raise ValueError("名称为空")
+    if not (content or "").strip():
+        raise ValueError("内容为空")
+    conn = connect()
+    try:
+        if not conn.execute("SELECT 1 FROM project WHERE id=?", (project_id,)).fetchone():
+            raise LookupError("项目不存在")
+        sid, ts = uid("src"), now_ms()
+        conn.execute("INSERT INTO source(id,project_id,name,content,type,size,created_at) VALUES(?,?,?,?,?,?,?)",
+                     (sid, project_id, name.strip(), content, type, size, ts))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": sid, "project_id": project_id, "name": name.strip(),
+            "content": content, "type": type, "size": size, "created_at": ts}
+
+
+def list_sources(project_id):
+    conn = connect()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT id,project_id,name,type,size,created_at FROM source WHERE project_id=? ORDER BY created_at",
+            (project_id,))]
+    finally:
+        conn.close()
+
+
+def delete_source(source_id):
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM source WHERE id=?", (source_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise LookupError("资料不存在")
+    finally:
+        conn.close()
+    return {"id": source_id}
+
+
+def set_node_project(node_id, project_id):
+    conn = connect()
+    try:
+        cur = conn.execute("UPDATE node SET project_id=? WHERE id=? AND deleted=0",
+                           (project_id, node_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise LookupError("节点不存在")
+    finally:
+        conn.close()
+    return {"id": node_id, "project_id": project_id}

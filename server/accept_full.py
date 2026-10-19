@@ -149,6 +149,38 @@ ra = c.post("/api/chat", json={"text": "A库"})
 rb = c.post("/api/chat", json={"text": "B库"})
 check(sse_done(ra.text)["nodeId"] != sse_done(rb.text)["nodeId"], "两根独立")
 
+# ── 真流式与可中断 ──
+import asyncio as _asyncio
+async def _cs(cancel=None):
+    out=[]
+    async for ch in llm_mod.chat_stream([{"role":"user","content":"hi"}], cancel):
+        out.append(ch)
+    return out
+_full=_asyncio.run(_cs())
+check(len(_full)>1, "chat_stream多块")
+check("".join(_full)==llm_mod.chat_sync([{"role":"user","content":"hi"}])[0], "chat_stream拼接等于原文")
+_ev=_asyncio.Event()
+async def _cs_gen():
+    async for ch in llm_mod.chat_stream([{"role":"user","content":"hi"}], _ev):
+        yield ch
+async def _drive():
+    g=_cs_gen().__aiter__()
+    await g.__anext__()
+    _ev.set()
+    n=1
+    try:
+        async for _ in g: n+=1
+    except StopAsyncIteration:
+        pass
+    return n
+check(_asyncio.run(_drive())<len(_full), "cancel提前停")
+r=c.post("/api/chat", json={"text":"流式多delta"})
+check(r.text.count("event: delta")>1, "api多delta")
+check("chat_stream" in MAIN_SRC, "真流式接线")
+check("asyncio.sleep(0.02)" not in MAIN_SRC, "无假回放")
+check("AbortController" in INK, "可中断接线")
+check("停止" in INK, "停止钮")
+
 # ── 分支改名节点 51-75 ──
 r = c.post("/api/branch", json={"parentId": root, "anchorText": "锚A", "color": "#f25555"})
 check(r.status_code == 200 and r.json()["node"]["parent_id"] == root, "分支挂父")
@@ -213,14 +245,14 @@ check("PRAGMA foreign_keys=ON" in STORE_SRC, "外键pragma")
 check("sProv" in INK and "sSave" in INK and "sTest" in INK, "设置面板三件")
 check("/api/chat" in INK and "getReader" in INK, "SSE接线")
 check("function md(" in INK and "##" not in INK.split("function md(")[0][-50:], "md函数")
-for pat in ["#{1,4}", "\\*\\*", "<li>", "<pre", "innerHTML=md(full)"]:
+for pat in ["#{1,4}", "\\*\\*", "<li>", "<pre", "mdOv(full)"]:
     check(pat in INK, "md特性" + pat[:8])
 check("/api/branch" in INK, "分支接线")
 check("/api/nodes/'+t.nodeId+'/rename" in INK or '/rename' in INK, "改名接线")
 check("返回上一级" in INK, "返回按钮")
 check("随便看看" in INK, "随机回顾")
 check("未命名" in INK, "未命名")
-check("await asyncio.sleep" in MAIN_SRC, "后端pacing")
+check("await asyncio.sleep" not in MAIN_SRC, "无人工pacing")
 check("no-store" in MAIN_SRC, "禁缓存")
 check('"*"' not in MAIN_SRC and "'*'" not in MAIN_SRC, "CORS无星")
 check("--mk" in INK, "荧光笔变量")
@@ -279,12 +311,13 @@ check("createElementNS" in INK and "treeGraph" in INK, "SVG图谱")
 check("curRootId" in INK, "分支高亮溯根")
 check("读取中断" in INK and "空回复" in INK, "流式失败显错")
 check("await q.put((\"delta\", err))" in MAIN_SRC, "失败也发delta")
-_real_chat = llm_mod.chat_sync
-def _boom(messages):
+_real_stream = llm_mod.chat_stream
+async def _boom_stream(messages, cancel=None):
     raise RuntimeError("boom-test")
-llm_mod.chat_sync = _boom
+    yield
+llm_mod.chat_stream = _boom_stream
 r = c.post("/api/chat", json={"text": "触发失败路径"})
-llm_mod.chat_sync = _real_chat
+llm_mod.chat_stream = _real_stream
 check(r.status_code == 200 and "生成失败" in r.text, "失败落库且可见")
 d = sse_done(r.text)
 check(bool(d and d.get("error") is True), "失败带error标")
@@ -490,6 +523,46 @@ check("treeAutoShown" in INK and "hasBranch" in INK, "树分叉后才首次露�
 check("const panels={chat:true,note:false,tree:false}" in INK, "初始树相暂不露")
 check("#tree.nov" in INK, "无分叉时树面板整体隐藏")
 check('title="树"' in INK, "侧栏树图标title")
+
+# ── 项目与资料（RAG）──
+from server import rag as rag_mod
+check("project" in STORE_SRC and "source" in STORE_SRC, "project/source表")
+check("def create_project" in STORE_SRC and "def add_source" in STORE_SRC, "project/source CRUD函数")
+check(hasattr(rag_mod, "chunk_text") and hasattr(rag_mod, "index_source") and hasattr(rag_mod, "retrieve"), "rag三函数存在")
+check(rag_mod.chunk_text("abcdefghij", size=4, overlap=1) == ['abcd', 'defg', 'ghij', 'j'], "chunk_text切块")
+r = c.post("/api/projects", json={"name": "测试项目"})
+check(r.status_code == 200 and r.json()["name"] == "测试项目", "建项目")
+pid = r.json()["id"]
+check(any(p["id"] == pid for p in c.get("/api/projects").json()["projects"]), "列项目")
+check(c.put("/api/projects/" + pid, json={"name": "改名"}).json()["name"] == "改名", "项目改名")
+r = c.post("/api/chat", json={"text": "根问题", "projectId": pid})
+proj_root = sse_done(r.text)["nodeId"]
+r = c.post("/api/sources", data={"project_id": pid, "text": "咖啡产地决定风味。耶加雪菲有花香。"})
+check(r.status_code == 200 and r.json()["name"] == "粘贴文本", "上传文本资料")
+src_id = r.json()["id"]
+check(any(s["id"] == src_id for s in c.get("/api/sources?project_id=" + pid).json()["sources"]), "列资料")
+_real_retrieve = rag_mod.retrieve
+rag_mod.retrieve = lambda p, q, top_k=None: [{"text": "耶加雪菲有花香", "source_name": "咖啡资料", "score": 0.9}]
+ctx = build_context(proj_root, query="咖啡风味")
+check(bool(ctx) and ctx[0]["role"] == "system" and "[1]" in ctx[0]["content"] and "耶加雪菲" in ctx[0]["content"], "build_context带资料前置")
+rag_mod.retrieve = _real_retrieve
+import tempfile
+rag_mod.CHROMA_DIR = tempfile.mkdtemp()
+rag_mod.reset()
+rag_mod._embed = lambda texts: [[1.0, 0.0] for _ in texts]
+check(rag_mod.index_source("src_test", pid, "测试资料", "耶加雪菲有花香果酸。") > 0, "index_source切块入库")
+hits = rag_mod.retrieve(pid, "花香")
+check(bool(hits) and "耶加雪菲" in hits[0]["text"], "retrieve命中")
+rag_mod.delete_source_chunks("src_test")
+check(rag_mod.retrieve(pid, "花香") == [], "删资料后检索空")
+rag_mod.reset()
+c.delete("/api/sources/" + src_id)
+check(c.get("/api/sources?project_id=" + pid).json()["sources"] == [], "删资料")
+c.delete("/api/projects/" + pid)
+check(c.get("/api/projects").json()["projects"] == [], "删项目级联")
+check('id="projSel"' in INK and 'id="srcBtn"' in INK, "前端项目选择器与上传入口")
+check("projectId" in INK, "前端传projectId")
+check("mdcite" in INK, "前端来源标注渲染")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))

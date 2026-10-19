@@ -12,7 +12,7 @@ import os
 import subprocess
 import sys
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -62,12 +62,28 @@ def _startup():
             print("auto_backup skip/fail: %s" % exc)
 
 
-def build_context(node_id):
-    """D-107：上下文 = path(root→self) 上消息；兄弟/子excluded（path 天然不含）。"""
+def build_context(node_id, query=None):
+    """D-107：上下文 = path(root→self) 上消息；兄弟/子excluded（path 天然不含）。
+    有 query 且根节点挂了项目时，RAG 检索结果前置为带 [n] 来源的 system 消息。"""
     out = []
-    for n in store.node_path(node_id):
+    path = store.node_path(node_id)
+    for n in path:
         for m in store.list_messages(n["id"]):
             out.append({"role": m["role"], "content": m["content"]})
+    if query and path:
+        try:
+            from server import rag
+            pid = path[0].get("project_id")
+            if pid:
+                hits = rag.retrieve(pid, query)
+                if hits:
+                    lines = ["【参考资料】"]
+                    for i, h in enumerate(hits, 1):
+                        lines.append("[%d] %s：%s" % (i, h.get("source_name", ""), h["text"]))
+                    lines.append("请基于以上资料回答，并标注引用来源（如 [1]）。")
+                    out.insert(0, {"role": "system", "content": "\n".join(lines)})
+        except Exception as exc:
+            print("rag retrieve failed: %s" % exc)  # 检索失败不拦聊天，但留痕
     return out
 
 
@@ -79,6 +95,7 @@ class ChatIn(BaseModel):
     text: str
     nodeId: str | None = None
     title: str | None = None
+    projectId: str | None = None
 
 
 class BranchIn(BaseModel):
@@ -280,6 +297,122 @@ def get_notes():
     return {"notes": store.list_notes()}
 
 
+def _extract_pdf(raw):
+    import io
+    from pypdf import PdfReader
+    reader = PdfReader(io.BytesIO(raw))
+    return "\n".join((p.extract_text() or "") for p in reader.pages)
+
+
+def _extract_docx(raw):
+    import io
+    from docx import Document
+    doc = Document(io.BytesIO(raw))
+    return "\n".join(p.text for p in doc.paragraphs)
+
+
+class ProjectIn(BaseModel):
+    name: str
+
+
+class ProjectRenameIn(BaseModel):
+    name: str
+
+
+@app.post("/api/projects")
+def create_project_ep(body: ProjectIn):
+    try:
+        return store.create_project(body.name)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/projects")
+def list_projects_ep():
+    return {"projects": store.list_projects()}
+
+
+@app.put("/api/projects/{project_id}")
+def rename_project_ep(project_id: str, body: ProjectRenameIn):
+    try:
+        return store.rename_project(project_id, body.name)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project_ep(project_id: str):
+    try:
+        return store.delete_project(project_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.post("/api/sources")
+async def upload_source(project_id: str = Form(...), name: str = Form(""),
+                        file: UploadFile | None = None, text: str = Form("")):
+    try:
+        if file is not None:
+            raw = await file.read()
+            fname = file.filename or name or "未命名"
+            ftype = (fname.rsplit(".", 1)[-1].lower() if "." in fname else "text")
+            if ftype == "pdf":
+                try:
+                    content = _extract_pdf(raw)
+                except Exception:
+                    raise ValueError("PDF 无法解析")
+            elif ftype == "docx":
+                try:
+                    content = _extract_docx(raw)
+                except Exception:
+                    raise ValueError("Word 文档无法解析")
+            elif ftype in ("txt", "md", "markdown", "text"):
+                content = raw.decode("utf-8", errors="replace")
+            else:
+                raise ValueError("不支持的文件类型：%s" % ftype)
+            name = name or fname
+            size = len(raw)
+        else:
+            content = text
+            ftype = "text"
+            name = name or "粘贴文本"
+            size = len(content.encode("utf-8"))
+        if not (content or "").strip():
+            raise ValueError("内容为空")
+        src = store.add_source(project_id, name, content, type=ftype, size=size)
+        try:
+            from server import rag
+            rag.index_source(src["id"], project_id, name, content)
+        except Exception as exc:
+            print("rag index failed: %s" % exc)  # 索引失败不拦上传，但留痕
+        return src
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/sources")
+def list_sources_ep(project_id: str):
+    return {"sources": store.list_sources(project_id)}
+
+
+@app.delete("/api/sources/{source_id}")
+def delete_source_ep(source_id: str):
+    try:
+        src = store.delete_source(source_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    try:
+        from server import rag
+        rag.delete_source_chunks(source_id)
+    except Exception as exc:
+        print("rag delete chunks failed: %s" % exc)
+    return src
+
+
 @app.post("/api/branch")
 def branch(body: BranchIn):
     if not (body.anchorText or "").strip():
@@ -303,27 +436,34 @@ async def chat(body: ChatIn):
             raise HTTPException(404, "节点不存在")
         node_id = body.nodeId
     else:
-        node_id = store.create_node(None, body.title or "未命名")["id"]
+        node_id = store.create_node(None, body.title or "未命名", project_id=body.projectId)["id"]
     store.add_message(node_id, "user", text)
 
     try:
-        messages = build_context(node_id)
+        messages = build_context(node_id, query=text)
     except Exception:
         store.add_message(node_id, "assistant", "（生成失败：服务内部错误）")
         raise
     q: asyncio.Queue = asyncio.Queue()
+    cancel = asyncio.Event()
 
     async def run():
+        full = ""
         try:
-            text_out, _ = await asyncio.to_thread(llm.chat_sync, messages)
-            if not (text_out or "").strip():
-                text_out = "（生成失败：模型返回了空内容）"
-            mid = store.add_message(node_id, "assistant", text_out)
-            step = 3
-            for i in range(0, len(text_out), step):
-                await q.put(("delta", text_out[i:i + step]))
-                await asyncio.sleep(0.02)
+            async for chunk in llm.chat_stream(messages, cancel):
+                full += chunk
+                await q.put(("delta", chunk))
+            if not full.strip():
+                full = "（生成失败：模型返回了空内容）"
+            mid = store.add_message(node_id, "assistant", full)
             await q.put(("done", {"nodeId": node_id, "messageId": mid["id"]}))
+        except asyncio.CancelledError:
+            if full.strip():
+                mid = store.add_message(node_id, "assistant", full + "（已停止）")
+                await q.put(("done", {"nodeId": node_id, "messageId": mid["id"], "cancelled": True}))
+            else:
+                await q.put(("done", {"nodeId": node_id, "cancelled": True}))
+            raise
         except Exception as exc:
             err = "（生成失败：%s）" % exc
             mid = store.add_message(node_id, "assistant", err)
@@ -334,17 +474,19 @@ async def chat(body: ChatIn):
     task = asyncio.create_task(run())
 
     async def gen():
-        while True:
-            item = await q.get()
-            if item is None:
-                break
-            kind, payload = item
-            yield sse(kind, {"text": payload} if kind == "delta" else payload)
-    try:
-        return StreamingResponse(gen(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-    finally:
-        pass
+        try:
+            while True:
+                item = await q.get()
+                if item is None:
+                    break
+                kind, payload = item
+                yield sse(kind, {"text": payload} if kind == "delta" else payload)
+        except asyncio.CancelledError:
+            cancel.set()
+            task.cancel()
+            raise
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 DEMO_DIR = os.path.join(ROOT, "demo")

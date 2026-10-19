@@ -3,9 +3,12 @@
 """LLM 调用：OpenAI 兼容端点 + 未配置时内置 mock。"""
 from __future__ import print_function
 
+import asyncio
 import json
 import os
 import urllib.request
+
+import httpx
 
 TIMEOUT = float(os.environ.get("LLM_TIMEOUT") or 120)
 
@@ -48,6 +51,42 @@ def chat_sync(messages):
     text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
     usage = (data.get("usage") or {})
     return text, {"input": usage.get("prompt_tokens", 0), "output": usage.get("completion_tokens", 0)}
+
+
+async def chat_stream(messages, cancel=None):
+    """异步生成器：逐块 yield 上游 token 流（真流式）。未配置走 mock（分块）。
+    cancel 为 asyncio.Event，置位即停止。失败抛异常由上层收口。"""
+    from server import settings as app_settings
+    if not app_settings.is_configured():
+        text = mock_reply(messages)
+        for i in range(0, len(text), 4):
+            if cancel is not None and cancel.is_set():
+                return
+            yield text[i:i + 4]
+            await asyncio.sleep(0)
+        return
+    base, key, model = resolve()
+    body = json.dumps({"model": model, "messages": messages, "stream": True}).encode("utf-8")
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        async with client.stream(
+                "POST", base + "/chat/completions", content=body,
+                headers={"Content-Type": "application/json",
+                         "Authorization": "Bearer " + key}) as resp:
+            async for line in resp.aiter_lines():
+                if cancel is not None and cancel.is_set():
+                    return
+                if not line.startswith("data:"):
+                    continue
+                data = line[len("data:"):].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                except ValueError:
+                    continue
+                delta = (((obj.get("choices") or [{}])[0].get("delta") or {}).get("content"))
+                if delta:
+                    yield delta
 
 
 def describe():

@@ -152,6 +152,21 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #batchbar{display:none;gap:10px;align-items:center;padding:8px 18px;font-size:13px;background:#fdf2f6;border-top:1px solid #f3c9d8}
 #batchbar button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 14px;cursor:pointer;font-family:inherit;font-size:13px}
 #batchbar button.go{background:#b05252;color:#fff;border:0}
+#projbar{display:flex;gap:8px;align-items:center;padding:8px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+#projbar select{flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--ink)}
+#projbar button{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink)}
+#projbar button:hover{border-color:var(--acc);color:var(--acc)}
+#srcPanel{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;z-index:80;width:420px;max-height:70vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+#srcPanel h3{margin:0 0 10px;font-size:15px}
+.srcitem{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:13px}
+.srcitem .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srcitem .sz{color:var(--mut);font-size:11px}
+.srcitem button{border:0;background:none;color:var(--mut);cursor:pointer;font-size:14px;padding:0 4px}
+.srcitem button:hover{color:var(--acc)}
+#srcPanel textarea{width:100%;height:80px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box}
+#srcPanel .row{display:flex;gap:8px;margin-top:10px}
+#srcPanel .row button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px;cursor:pointer;font-family:inherit;font-size:13px}
+.cite{color:var(--acc);cursor:pointer;text-decoration:underline}
 </style></head><body>
 <div id="side">
 <button data-m="chat" class="on" title="聊天"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="11.5" rx="3"/><path d="M9 16v3.8L13.2 16"/></svg></button>
@@ -165,6 +180,12 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 </div>
 <div id="main">
 <div id="center">
+<div id="projbar">
+<select id="projSel"><option value="">不开项目</option></select>
+<button id="projNew">＋项目</button>
+<input id="projName" placeholder="项目名称" style="display:none;flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--ink)">
+<button id="srcBtn">上传资料</button>
+</div>
 <div id="tabs"></div>
 <div id="cv">
 <div id="chat">
@@ -194,12 +215,22 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="tabmenu"></div>
 <div id="fmtmenu"></div>
 <div id="pal"></div>
+<div id="srcPanel">
+<h3>上传资料</h3>
+<input type="file" id="srcFile" style="display:none">
+<button id="srcPick">选择文件</button>
+<textarea id="srcText" placeholder="或粘贴文本 / Markdown"></textarea>
+<div class="row"><button id="srcUpload">上传</button><button id="srcClose">取消</button></div>
+<h3 style="margin-top:14px">资料列表</h3>
+<div id="srcList"></div>
+</div>
 <div id="toast"></div>
 <script>
 const POOL=['#f25555','#3fa7ff','#41c46b','#b678f0','#f5a623','#e06ba8','#22c3b6','#8a9a5b','#ff7a45','#6b7ff0','#c0a030','#30b080','#a030b0','#3080c0','#d03050','#50d030','#906020','#206090','#c09030','#3090c0','#7030a0','#30a070','#a07030','#5070c0','#c05070','#7050c0','#40a0c0','#c040a0','#a0c040','#80c040','#4080c0','#c08040','#9040c0','#40c090','#c09040','#6040c0','#4060c0','#c06040','#a0a030','#30a0a0'];
 const ULC=['#f5d90a','#7fd67f','#7fb3f5','#f5a0c0','#c0a0f5','#f5a05a','#5ad6d6','#c9c9c9'];
 const used=new Set();
 const tabs=[];let cur=null,tabSeq=0,nodesCache=[];
+let curProject=null,projects=[],sources=[];
 const notes=[];
 let treeAutoShown=false;
 function hasBranch(){return nodesCache.some(n=>n.parent_id)}
@@ -426,6 +457,7 @@ function md(s){s=String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
  flush();
  h=h.replace(/\u0000(\d+)\u0000/g,(m,i)=>code[+i]);
  return h}
+function mdcite(h){return h.replace(/\[(\d+)\]/g,'<span class="cite" data-n="$1">[$1]</span>')}
 function inline(s){return s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code style="background:#f0ebe0;border-radius:4px;padding:0 4px">$1</code>')}
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function mdSeg(s){s=String(s);const atoms=[];
@@ -481,7 +513,7 @@ function atomsHtml(atoms,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start&&(o.kind=
    ovs.forEach(o=>{if(o.kind==='mark'&&ins(o))pt='<mark class="hl" style="--mk:'+o.color+'55"'+(o.ref_node?' data-ref="'+o.ref_node+'"':'')+'>'+pt+'</mark>'});
    h+=pt}
   return h+a.post}).join('')}
-function mdOv(text,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start);if(!ovs.length)return md(text);return atomsHtml(mdSeg(text),ovs)}
+function mdOv(text,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start);if(!ovs.length)return mdcite(md(text));return mdcite(atomsHtml(mdSeg(text),ovs))}
 function plainOffset(root,node,off){const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let p=0,n;
  while((n=w.nextNode())){if(n===node)return p+Math.min(off,n.data.length);p+=n.data.length}return -1}
 function rangeToSrc(range,bubble,msg){const a=plainOffset(bubble,range.startContainer,range.startOffset),b=plainOffset(bubble,range.endContainer,range.endOffset);
@@ -519,33 +551,51 @@ async function send(text){text=(text||'').trim();if(!text)return;
  const first=cur.msgs!==null&&cur.msgs.length===0;
  if(cur.msgs===null)cur.msgs=[];
  const t0=cur;
+ const ac=new AbortController();
  t0.msgs.push({role:'u',text});renderMsgs();
  const M=document.getElementById('msgs');
  const ab=document.createElement('div');ab.className='msg-a is-thinking';ab.innerHTML='<div class="thinking"><span></span><span></span><span></span></div>';M.appendChild(ab);
+ const stopBtn=document.createElement('button');stopBtn.className='stop';stopBtn.textContent='停止';stopBtn.style.cssText='margin-top:6px;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--card);cursor:pointer';stopBtn.onclick=()=>{ac.abort()};M.appendChild(stopBtn);
  M.scrollTop=M.scrollHeight;
  let resp;
- try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:t0.nodeId})})}
- catch(_){ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
- if(!resp.ok){ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
- const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null;
+ try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:t0.nodeId,projectId:curProject}),signal:ac.signal})}
+ catch(e){if(e&&e.name==='AbortError'){ab.textContent='（已停止）';if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);send.busy=false;setSendLock(false);return}ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
+ if(!resp.ok){if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
+ const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null,doneCancelled=false;
  try{
  for(;;){const r=await rd.read();if(r.done)break;buf+=dec.decode(r.value,{stream:true});
   const parts=buf.split('\n\n');buf=parts.pop();
   for(const p of parts){const m=p.match(/^event: (\w+)\ndata: ([\s\S]*)$/);if(!m)continue;
    let d;try{d=JSON.parse(m[2])}catch(_){continue}
-   if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;if(t0===cur){ab.innerHTML=md(full)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}}
-   else if(m[1]==='done'){doneId=d.nodeId}}}
- }catch(e){ab.textContent='（读取中断：'+e.message+'，本轮已落库，切出去再回来可看）';
+   if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;if(t0===cur){ab.innerHTML=mdOv(full)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}}
+   else if(m[1]==='done'){doneId=d.nodeId;if(d.cancelled)doneCancelled=true}}}
+ }catch(e){if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);ab.textContent='（读取中断：'+e.message+'，本轮已落库，切出去再回来可看）';
   t0.msgs.push({role:'a',text:ab.textContent});addResend(ab,()=>text);renderTree();refreshRoots();send.busy=false;setSendLock(false);return}
  ab.classList.remove('is-thinking');
+ if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);
  if(doneId)t0.nodeId=doneId;
- if(full&&t0===cur)ab.innerHTML=md(full);
- if(!full){full=ab.textContent&&ab.textContent!=='…'?ab.textContent:'（空回复：模型什么都没返回）';ab.innerHTML=md(full)}
+ if(doneCancelled){ab.textContent='（已停止）';send.busy=false;setSendLock(false);return}
+ if(full&&t0===cur)ab.innerHTML=mdOv(full);
+ if(!full){full=ab.textContent&&ab.textContent!=='…'?ab.textContent:'（空回复：模型什么都没返回）';ab.innerHTML=mdOv(full)}
  await refreshMsgs(t0);
  if(!t0.msgs.length){t0.msgs.push({role:'a',text:full||'（空回复：模型什么都没返回）'});if(t0===cur)renderMsgs()}
  if(first&&t0.nodeId){t0.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
   fetch('/api/nodes/'+t0.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
    if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}send.busy=false;setSendLock(false)}
+async function loadProjects(){try{const d=await (await fetch('/api/projects')).json();projects=d.projects||[];renderProjSel()}catch(_){}}
+function renderProjSel(){const s=document.getElementById('projSel');const v=s.value;s.innerHTML='<option value="">不开项目</option>';projects.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;if(p.id===curProject)o.selected=true;s.appendChild(o)});s.value=v||curProject||''}
+async function createProject(n){if(!n||!n.trim())return;try{const r=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n.trim()})});const d=await r.json();if(r.ok){curProject=d.id;await loadProjects();toast('已建项目')}}catch(e){toast('建项目失败')}}
+function openSrcPanel(){document.getElementById('srcPanel').style.display='block';renderSources()}
+function closeSrcPanel(){document.getElementById('srcPanel').style.display='none'}
+async function renderSources(){const L=document.getElementById('srcList');L.innerHTML='';if(!curProject){L.innerHTML='<div style="color:var(--mut);font-size:12px">先选项目再上传资料</div>';return}try{const d=await (await fetch('/api/sources?project_id='+curProject)).json();sources=d.sources||[];if(!sources.length){L.innerHTML='<div style="color:var(--mut);font-size:12px">暂无资料</div>';return}sources.forEach(s=>{const it=document.createElement('div');it.className='srcitem';const nm=document.createElement('span');nm.className='nm';nm.textContent=s.name;it.appendChild(nm);const sz=document.createElement('span');sz.className='sz';sz.textContent=(s.size||0)+'B';it.appendChild(sz);const del=document.createElement('button');del.textContent='×';del.onclick=async()=>{if(!del.dataset.armed){del.dataset.armed='1';del.textContent='确认';setTimeout(()=>{del.dataset.armed='';del.textContent='×'},2500);return}try{const r=await fetch('/api/sources/'+s.id,{method:'DELETE'});if(!r.ok)throw 0;renderSources();toast('已删除')}catch(e){toast('删除失败')}};it.appendChild(del);L.appendChild(it)})}catch(e){L.innerHTML='<div style="color:var(--mut);font-size:12px">加载失败</div>'}}
+async function uploadSource(){const f=document.getElementById('srcFile').files[0];const t=document.getElementById('srcText').value;if(!curProject){toast('先选项目');return}if(uploadSource.busy)return;uploadSource.busy=true;const fd=new FormData();fd.append('project_id',curProject);if(f&&t.trim())toast('将只上传文件');if(f)fd.append('file',f);else if(t.trim())fd.append('text',t);else{uploadSource.busy=false;toast('选文件或粘贴文本');return}try{const r=await fetch('/api/sources',{method:'POST',body:fd});const d=await r.json();if(r.ok){document.getElementById('srcFile').value='';document.getElementById('srcText').value='';renderSources();toast('已上传')}else toast(d.detail||'上传失败')}catch(e){toast('上传失败')}uploadSource.busy=false}
+document.getElementById('projSel').onchange=e=>{curProject=e.target.value||null;renderProjSel()};
+document.getElementById('projNew').onclick=()=>{const i=document.getElementById('projName');i.style.display='block';i.value='';i.focus();i.onkeydown=e=>{if(e.key==='Enter'){const n=i.value;i.style.display='none';if(n&&n.trim())createProject(n.trim())}}};
+document.getElementById('srcBtn').onclick=openSrcPanel;
+document.getElementById('srcClose').onclick=closeSrcPanel;
+document.getElementById('srcPick').onclick=()=>document.getElementById('srcFile').click();
+document.getElementById('srcUpload').onclick=uploadSource;
+document.addEventListener('click',e=>{const c=e.target.closest('.cite');if(c){openSrcPanel();const n=c.dataset.n;setTimeout(()=>{const items=document.querySelectorAll('#srcList .srcitem');const idx=parseInt(n,10)-1;if(items[idx]){items[idx].scrollIntoView({block:'center'});items[idx].style.background='var(--acc-soft)';setTimeout(()=>{items[idx].style.background=''},1200)}},50)}});
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
  if(!box.contains(r.commonAncestorContainer))return null;return{range:r,text:s.toString()}}
@@ -764,9 +814,10 @@ function closeTabsByIds(set){let ch=false;for(let i=tabs.length-1;i>=0;i--){if(s
  if(!cur||set.has(cur.nodeId)){cur=tabs.length?tabs[tabs.length-1]:null}
  renderTabs();if(cur)switchTabMsgs(cur);else renderMsgs()}
 document.addEventListener('click',e=>{if(!e.target.closest('#treemenu'))hideTreeMenu();
- if(!e.target.closest('#tabmenu'))hideTabMenu();if(!e.target.closest('#pal')&&!e.target.closest('#menu'))hidePal()});
+ if(!e.target.closest('#tabmenu'))hideTabMenu();if(!e.target.closest('#pal')&&!e.target.closest('#menu'))hidePal();
+ if(!e.target.closest('#srcPanel')&&!e.target.closest('#srcBtn')&&!e.target.closest('.cite'))closeSrcPanel()});
 document.addEventListener('mousedown',e=>{if(e.button===1&&e.target.closest('#treeList,#treeGraph,#roots'))e.preventDefault()});
-document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const dr=document.getElementById('drawer');if(dr.classList.contains('open')){dr.classList.remove('open');return}if(selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const dr=document.getElementById('drawer');if(dr.classList.contains('open')){dr.classList.remove('open');return}if(document.getElementById('srcPanel').style.display==='block'){closeSrcPanel();return}if(selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
 document.getElementById('send').onclick=()=>{send(document.getElementById('q').value);document.getElementById('q').value=''};
 document.getElementById('q').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};
@@ -794,6 +845,7 @@ document.getElementById('sTest').onclick=async()=>{
  try{const r=await fetch('/api/settings/test',{method:'POST'});const d=await r.json();
   document.getElementById('drawMsg').textContent=(d.ok?'✓ ':'✗ ')+d.message}catch(e){document.getElementById('drawMsg').textContent='失败：'+e.message}};
 (async function boot(){
+ loadProjects();
  try{const s=await (await fetch('/api/settings')).json();
   const sel=document.getElementById('sProv');sel.innerHTML='';
   Object.entries(s.providers||{}).forEach(([id,p])=>{const o=document.createElement('option');o.value=id;o.textContent=p.name;sel.appendChild(o)});
