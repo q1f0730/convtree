@@ -7,6 +7,8 @@ python -m uvicorn server.main:app --port 8787   # 启动：开 / 即前端；首
 python server/accept_full.py                    # 全量验收（200+ 例，隔离库 + CONVTREE_NO_AUTOBACKUP=1）
 python tools/check_invariants.py --all          # D-101 静态门禁 + 对照自测
 python tools/ledger.py verify                   # 账本链完整
+node tools/test_ui_logic.js                     # 前端纯逻辑（划词菜单定位/树布局连线/快捷键文案），抽 ink.html 的 <script id="uilogic">
+python tools/ui_e2e.py [--shots DIR]            # 真浏览器端到端（需 playwright + 系统 chromium；无浏览器退出 3=跳过）
 python tools/ledger.py list [--kind goal] [--tail N]
 python tools/backup.py                          # 手动备份（自验 integrity_check + 行数一致，失败删半成品）
 ```
