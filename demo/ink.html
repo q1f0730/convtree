@@ -152,8 +152,9 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #batchbar{display:none;gap:10px;align-items:center;padding:8px 18px;font-size:13px;background:#fdf2f6;border-top:1px solid #f3c9d8}
 #batchbar button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 14px;cursor:pointer;font-family:inherit;font-size:13px}
 #batchbar button.go{background:#b05252;color:#fff;border:0}
-#projbar{display:flex;gap:8px;align-items:center;padding:8px 18px;border-bottom:1px solid var(--line);background:var(--card)}
-#projbar select{flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--ink)}
+#projbar{display:flex;gap:8px;align-items:center;padding:8px 24px;font-size:13px;color:var(--mut)}
+#projbar .lb{letter-spacing:2px;font-size:12px}
+#projbar select{max-width:220px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--ink)}
 #projbar button{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink)}
 #projbar button:hover{border-color:var(--acc);color:var(--acc)}
 #srcPanel{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;z-index:80;width:420px;max-height:70vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
@@ -166,7 +167,20 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #srcPanel textarea{width:100%;height:80px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box}
 #srcPanel .row{display:flex;gap:8px;margin-top:10px}
 #srcPanel .row button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px;cursor:pointer;font-family:inherit;font-size:13px}
-.cite{color:var(--acc);cursor:pointer;text-decoration:underline}
+#srcCount{display:inline-block;min-width:18px;margin-left:4px;padding:0 5px;border-radius:9px;background:var(--acc-soft);color:var(--acc);font-size:11px;line-height:18px;text-align:center}
+.srcitem .ty{font-size:10.5px;letter-spacing:1px;color:var(--acc);border:1px solid var(--acc-soft);border-radius:5px;padding:0 5px;text-transform:uppercase}
+#srcPanel .urlrow{display:flex;gap:8px;margin-top:8px}
+#srcPanel .urlrow input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;background:var(--bg);color:var(--ink)}
+#srcPanel .urlrow button,#srcPick{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 12px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink)}
+#srcPanel .hint{font-size:12px;color:var(--mut);margin:2px 0 8px}
+.cite{display:inline-block;color:var(--acc);background:var(--acc-soft);border-radius:6px;padding:0 5px;margin:0 1px;font-size:.78em;line-height:1.5;vertical-align:.12em;cursor:pointer;text-decoration:none;font-weight:600}
+.cite:hover{background:var(--acc);color:#fff}
+#citePop{display:none;position:fixed;z-index:90;width:min(380px,86vw);max-height:46vh;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:0 14px 44px rgba(44,54,68,.18);font-size:13.5px;line-height:1.8}
+#citePop .cp-hd{display:flex;gap:8px;align-items:baseline;margin-bottom:6px;font-weight:600}
+#citePop .cp-n{color:var(--acc)}
+#citePop .cp-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#citePop .cp-tx{white-space:pre-wrap;color:var(--ink);background:var(--acc-faint);border-left:3px solid var(--acc);border-radius:4px;padding:6px 10px}
+#citePop .cp-ft{margin-top:6px;font-size:11px;color:var(--mut)}
 </style></head><body>
 <div id="side">
 <button data-m="chat" class="on" title="聊天"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="11.5" rx="3"/><path d="M9 16v3.8L13.2 16"/></svg></button>
@@ -181,10 +195,11 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="main">
 <div id="center">
 <div id="projbar">
-<select id="projSel"><option value="">不开项目</option></select>
-<button id="projNew">＋项目</button>
-<input id="projName" placeholder="项目名称" style="display:none;flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--ink)">
-<button id="srcBtn">上传资料</button>
+<span class="lb">笔记本</span>
+<select id="projSel" title="选了笔记本后，新对话会基于其中的资料回答并标注来源"><option value="">不使用笔记本</option></select>
+<button id="projNew" title="新建笔记本">＋</button>
+<input id="projName" placeholder="笔记本名称，回车确认" style="display:none;flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-family:inherit;font-size:13px;color:var(--ink)">
+<button id="srcBtn" title="管理本笔记本的资料">资料<span id="srcCount">0</span></button>
 </div>
 <div id="tabs"></div>
 <div id="cv">
@@ -216,14 +231,17 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="fmtmenu"></div>
 <div id="pal"></div>
 <div id="srcPanel">
-<h3>上传资料</h3>
-<input type="file" id="srcFile" style="display:none">
-<button id="srcPick">选择文件</button>
-<textarea id="srcText" placeholder="或粘贴文本 / Markdown"></textarea>
-<div class="row"><button id="srcUpload">上传</button><button id="srcClose">取消</button></div>
+<h3 id="srcTitle">添加资料</h3>
+<div class="hint">支持 txt / md / pdf / docx、网页链接、粘贴文本。添加后自动切块建索引。</div>
+<input type="file" id="srcFile" accept=".txt,.md,.markdown,.pdf,.docx" style="display:none">
+<button id="srcPick">选择文件</button> <span id="srcFileName" style="font-size:12px;color:var(--mut)"></span>
+<div class="urlrow"><input id="srcUrl" placeholder="或粘贴网页链接 https://…"><button id="srcUrlAdd">抓取</button></div>
+<textarea id="srcText" placeholder="或粘贴文本 / Markdown" style="margin-top:8px"></textarea>
+<div class="row"><button id="srcUpload">添加</button><button id="srcClose">关闭</button></div>
 <h3 style="margin-top:14px">资料列表</h3>
 <div id="srcList"></div>
 </div>
+<div id="citePop"></div>
 <div id="toast"></div>
 <script>
 const POOL=['#f25555','#3fa7ff','#41c46b','#b678f0','#f5a623','#e06ba8','#22c3b6','#8a9a5b','#ff7a45','#6b7ff0','#c0a030','#30b080','#a030b0','#3080c0','#d03050','#50d030','#906020','#206090','#c09030','#3090c0','#7030a0','#30a070','#a07030','#5070c0','#c05070','#7050c0','#40a0c0','#c040a0','#a0c040','#80c040','#4080c0','#c08040','#9040c0','#40c090','#c09040','#6040c0','#4060c0','#c06040','#a0a030','#30a0a0'];
@@ -405,10 +423,10 @@ async function renameTab(t,name){t.userNamed=true;if(!t.nodeId){t.name=name;rend
  try{const r=await fetch('/api/nodes/'+t.nodeId+'/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:name})});
   if(!r.ok)throw new Error((await r.text()).slice(0,120));t.name=name;renderTabs();renderTree();refreshRoots()}
  catch(e){toast('改名失败：'+e.message)}}
-function switchTab(t){cur=t;hideTreeMenu();hideFmtMenu();hideTabMenu();hidePal();document.getElementById('menu').style.display='none';renderTabs();renderTree();refreshRoots();switchTabMsgs(t)}
+function switchTab(t){cur=t;hideCitePop();hideTreeMenu();hideFmtMenu();hideTabMenu();hidePal();document.getElementById('menu').style.display='none';renderTabs();renderTree();refreshRoots();switchTabMsgs(t)}
 function refreshRoots(){fetch('/api/nodes').then(r=>r.json()).then(d=>{nodesCache=d.nodes||[];seedUsed();
  if(!treeAutoShown&&nodesCache.some(n=>n.parent_id)){treeAutoShown=true;panels.tree=true;syncPanels()}
- renderRoots(nodesCache);renderTree()}).catch(()=>{})}
+ renderRoots(nodesCache);renderTree();syncProjectFromCur()}).catch(()=>{})}
 function fmtTime(ms){const d=new Date(ms);const p=n=>String(n).padStart(2,'0');return (d.getMonth()+1)+'-'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function curRootId(){if(!cur||!cur.nodeId)return null;const byId={};nodesCache.forEach(n=>byId[n.id]=n);
  let id=cur.nodeId,guard=0;while(byId[id]&&byId[id].parent_id&&guard++<50)id=byId[id].parent_id;return id}
@@ -418,7 +436,7 @@ function renderRoots(all){const R=document.getElementById('roots');const st=R.sc
   const d=document.createElement('div');d.className='ritem'+(n.id===rid?' on':'');
   d.title=n.title;
   const t=document.createElement('div');t.textContent=n.title;d.appendChild(t);
-  const s=document.createElement('small');s.textContent=fmtTime(n.created_at);d.appendChild(s);
+  const s=document.createElement('small');s.textContent=fmtTime(n.created_at)+(n.project_id&&projName(n.project_id)?' · '+projName(n.project_id):'');d.appendChild(s);
   d.onclick=()=>{
    const op=tabs.find(t=>t.nodeId===n.id);
    if(op){switchTab(op);return}
@@ -440,7 +458,8 @@ function renderMsgs(){const M=document.getElementById('msgs');M.innerHTML='';
  M.scrollTop=M.scrollHeight}
 function bubble(m){const d=document.createElement('div');d.className=m.role==='u'?'msg-u':'msg-a';
  if(m.mid)d.dataset.mid=m.mid;
- if(m.role==='a'){d.innerHTML=mdOv(m.text,m.ov);if(isFailText(m.text))addResend(d,lastUserText)}else d.textContent=m.text;return d}
+ if(m.cites&&m.cites.length)d._cites=m.cites;
+ if(m.role==='a'){d.innerHTML=mdOv(m.text,m.ov,m.cites);if(isFailText(m.text))addResend(d,lastUserText)}else d.textContent=m.text;return d}
 function md(s){s=String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
  const code=[];s=s.replace(/```(\w*)\n([\s\S]*?)(```|$)/g,(m,l,c)=>{code.push('<pre style="background:#f0ebe0;border-radius:8px;padding:10px 12px;overflow-x:auto;font-size:13px">'+c.replace(/\n$/,'')+'</pre>');return '\u0000'+(code.length-1)+'\u0000'});
  const rows=s.split('\n');let h='',list=null;
@@ -457,7 +476,8 @@ function md(s){s=String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
  flush();
  h=h.replace(/\u0000(\d+)\u0000/g,(m,i)=>code[+i]);
  return h}
-function mdcite(h){return h.replace(/\[(\d+)\]/g,'<span class="cite" data-n="$1">[$1]</span>')}
+function mdcite(h,cites){if(!cites||!cites.length)return h;const ok=new Set(cites.map(c=>String(c.n)));
+ return h.replace(/\[(\d+)\]/g,(m,n)=>ok.has(n)?'<span class="cite" data-n="'+n+'">['+n+']</span>':m)}
 function inline(s){return s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code style="background:#f0ebe0;border-radius:4px;padding:0 4px">$1</code>')}
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function mdSeg(s){s=String(s);const atoms=[];
@@ -513,7 +533,7 @@ function atomsHtml(atoms,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start&&(o.kind=
    ovs.forEach(o=>{if(o.kind==='mark'&&ins(o))pt='<mark class="hl" style="--mk:'+o.color+'55"'+(o.ref_node?' data-ref="'+o.ref_node+'"':'')+'>'+pt+'</mark>'});
    h+=pt}
   return h+a.post}).join('')}
-function mdOv(text,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start);if(!ovs.length)return mdcite(md(text));return mdcite(atomsHtml(mdSeg(text),ovs))}
+function mdOv(text,ovs,cites){ovs=(ovs||[]).filter(o=>o&&o.end>o.start);if(!ovs.length)return mdcite(md(text),cites);return mdcite(atomsHtml(mdSeg(text),ovs),cites)}
 function plainOffset(root,node,off){const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let p=0,n;
  while((n=w.nextNode())){if(n===node)return p+Math.min(off,n.data.length);p+=n.data.length}return -1}
 function rangeToSrc(range,bubble,msg){const a=plainOffset(bubble,range.startContainer,range.startOffset),b=plainOffset(bubble,range.endContainer,range.endOffset);
@@ -535,7 +555,7 @@ function attachOvs(msgs,ovs,nodeId){const byMid={};(ovs||[]).forEach(x=>{(byMid[
 async function fetchMsgs(nodeId){const gm=fetch('/api/nodes/'+nodeId+'/messages').then(r=>{if(!r.ok)throw 0;return r.json()});
  const go=fetch('/api/nodes/'+nodeId+'/overlays').then(r=>{if(!r.ok)throw 0;return r.json()}).catch(()=>({overlays:[]}));
  const d=await gm,o=await go;
- return attachOvs((d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content,mid:m.id})),o.overlays,nodeId)}
+ return attachOvs((d.messages||[]).map(m=>({role:m.role==='user'?'u':'a',text:m.content,mid:m.id,cites:m.cites||[]})),o.overlays,nodeId)}
 async function refreshMsgs(t){t=t||cur;if(!t||!t.nodeId)return;
  try{t.msgs=await fetchMsgs(t.nodeId);if(t===cur)renderMsgs()}catch(_){}
  renderTree();refreshRoots()}
@@ -561,13 +581,14 @@ async function send(text){text=(text||'').trim();if(!text)return;
  try{resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,nodeId:t0.nodeId,projectId:curProject}),signal:ac.signal})}
  catch(e){if(e&&e.name==='AbortError'){ab.textContent='（已停止）';if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);send.busy=false;setSendLock(false);return}ab.textContent='（连不上后端：确认已启动 python -m uvicorn server.main:app --port 8787）';addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
  if(!resp.ok){if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);ab.textContent='（'+resp.status+'）'+(await resp.text()).slice(0,200);addResend(ab,()=>text);send.busy=false;setSendLock(false);return}
- const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null,doneCancelled=false;
+ const rd=resp.body.getReader(),dec=new TextDecoder();let buf='',full='',doneId=null,doneCancelled=false,cites=[];
  try{
  for(;;){const r=await rd.read();if(r.done)break;buf+=dec.decode(r.value,{stream:true});
   const parts=buf.split('\n\n');buf=parts.pop();
   for(const p of parts){const m=p.match(/^event: (\w+)\ndata: ([\s\S]*)$/);if(!m)continue;
    let d;try{d=JSON.parse(m[2])}catch(_){continue}
-   if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;if(t0===cur){ab.innerHTML=mdOv(full)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}}
+   if(m[1]==='cites'){cites=d.cites||[];ab._cites=cites}
+   else if(m[1]==='delta'){ab.classList.remove('is-thinking');full+=d.text;if(t0===cur){ab.innerHTML=mdOv(full,null,cites)+'<span class="caret"></span>';M.scrollTop=M.scrollHeight}}
    else if(m[1]==='done'){doneId=d.nodeId;if(d.cancelled)doneCancelled=true}}}
  }catch(e){if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);ab.textContent='（读取中断：'+e.message+'，本轮已落库，切出去再回来可看）';
   t0.msgs.push({role:'a',text:ab.textContent});addResend(ab,()=>text);renderTree();refreshRoots();send.busy=false;setSendLock(false);return}
@@ -575,27 +596,69 @@ async function send(text){text=(text||'').trim();if(!text)return;
  if(stopBtn&&stopBtn.parentNode)stopBtn.parentNode.removeChild(stopBtn);
  if(doneId)t0.nodeId=doneId;
  if(doneCancelled){ab.textContent='（已停止）';send.busy=false;setSendLock(false);return}
- if(full&&t0===cur)ab.innerHTML=mdOv(full);
- if(!full){full=ab.textContent&&ab.textContent!=='…'?ab.textContent:'（空回复：模型什么都没返回）';ab.innerHTML=mdOv(full)}
+ if(full&&t0===cur)ab.innerHTML=mdOv(full,null,cites);
+ if(!full){full=ab.textContent&&ab.textContent!=='…'?ab.textContent:'（空回复：模型什么都没返回）';ab.innerHTML=mdOv(full,null,cites)}
  await refreshMsgs(t0);
  if(!t0.msgs.length){t0.msgs.push({role:'a',text:full||'（空回复：模型什么都没返回）'});if(t0===cur)renderMsgs()}
  if(first&&t0.nodeId){t0.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
   fetch('/api/nodes/'+t0.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
    if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}send.busy=false;setSendLock(false)}
-async function loadProjects(){try{const d=await (await fetch('/api/projects')).json();projects=d.projects||[];renderProjSel()}catch(_){}}
-function renderProjSel(){const s=document.getElementById('projSel');const v=s.value;s.innerHTML='<option value="">不开项目</option>';projects.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;if(p.id===curProject)o.selected=true;s.appendChild(o)});s.value=v||curProject||''}
-async function createProject(n){if(!n||!n.trim())return;try{const r=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n.trim()})});const d=await r.json();if(r.ok){curProject=d.id;await loadProjects();toast('已建项目')}}catch(e){toast('建项目失败')}}
+async function loadProjects(){try{const d=await (await fetch('/api/projects')).json();projects=d.projects||[];if(curProject&&!projects.some(p=>p.id===curProject))curProject=null;renderProjSel();refreshSrcCount();renderRoots(nodesCache)}catch(_){}}
+function projName(id){const p=projects.find(x=>x.id===id);return p?p.name:''}
+function renderProjSel(){const s=document.getElementById('projSel');s.innerHTML='<option value="">不使用笔记本</option>';projects.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;s.appendChild(o)});
+ s.value=curProject||'';renderEmptyHint()}
+function renderEmptyHint(){const sub=document.querySelector('#empty .sub');if(!sub)return;
+ sub.textContent=curProject?('在「'+projName(curProject)+'」里提问 · 回答会标注资料来源'):'从一个难题开始 · 沿着分支想透'}
+function setProject(id){curProject=id||null;renderProjSel();refreshSrcCount();if(document.getElementById('srcPanel').style.display==='block')renderSources()}
+async function refreshSrcCount(){const el=document.getElementById('srcCount');if(!curProject){el.textContent='0';return}
+ try{const d=await (await fetch('/api/sources?project_id='+curProject)).json();sources=d.sources||[];el.textContent=String(sources.length)}catch(_){}}
+async function createProject(n){if(!n||!n.trim())return;try{const r=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n.trim()})});const d=await r.json();if(r.ok){curProject=d.id;await loadProjects();toast('已建笔记本，添加资料吧');openSrcPanel()}else toast(d.detail||'建笔记本失败')}catch(e){toast('建笔记本失败')}}
 function openSrcPanel(){document.getElementById('srcPanel').style.display='block';renderSources()}
 function closeSrcPanel(){document.getElementById('srcPanel').style.display='none'}
-async function renderSources(){const L=document.getElementById('srcList');L.innerHTML='';if(!curProject){L.innerHTML='<div style="color:var(--mut);font-size:12px">先选项目再上传资料</div>';return}try{const d=await (await fetch('/api/sources?project_id='+curProject)).json();sources=d.sources||[];if(!sources.length){L.innerHTML='<div style="color:var(--mut);font-size:12px">暂无资料</div>';return}sources.forEach(s=>{const it=document.createElement('div');it.className='srcitem';const nm=document.createElement('span');nm.className='nm';nm.textContent=s.name;it.appendChild(nm);const sz=document.createElement('span');sz.className='sz';sz.textContent=(s.size||0)+'B';it.appendChild(sz);const del=document.createElement('button');del.textContent='×';del.onclick=async()=>{if(!del.dataset.armed){del.dataset.armed='1';del.textContent='确认';setTimeout(()=>{del.dataset.armed='';del.textContent='×'},2500);return}try{const r=await fetch('/api/sources/'+s.id,{method:'DELETE'});if(!r.ok)throw 0;renderSources();toast('已删除')}catch(e){toast('删除失败')}};it.appendChild(del);L.appendChild(it)})}catch(e){L.innerHTML='<div style="color:var(--mut);font-size:12px">加载失败</div>'}}
-async function uploadSource(){const f=document.getElementById('srcFile').files[0];const t=document.getElementById('srcText').value;if(!curProject){toast('先选项目');return}if(uploadSource.busy)return;uploadSource.busy=true;const fd=new FormData();fd.append('project_id',curProject);if(f&&t.trim())toast('将只上传文件');if(f)fd.append('file',f);else if(t.trim())fd.append('text',t);else{uploadSource.busy=false;toast('选文件或粘贴文本');return}try{const r=await fetch('/api/sources',{method:'POST',body:fd});const d=await r.json();if(r.ok){document.getElementById('srcFile').value='';document.getElementById('srcText').value='';renderSources();toast('已上传')}else toast(d.detail||'上传失败')}catch(e){toast('上传失败')}uploadSource.busy=false}
-document.getElementById('projSel').onchange=e=>{curProject=e.target.value||null;renderProjSel()};
-document.getElementById('projNew').onclick=()=>{const i=document.getElementById('projName');i.style.display='block';i.value='';i.focus();i.onkeydown=e=>{if(e.key==='Enter'){const n=i.value;i.style.display='none';if(n&&n.trim())createProject(n.trim())}}};
+const SRC_TY={txt:'TXT',md:'MD',pdf:'PDF',docx:'DOCX',url:'网页',text:'粘贴'};
+async function renderSources(){const L=document.getElementById('srcList');L.innerHTML='';
+ document.getElementById('srcTitle').textContent=curProject?('「'+projName(curProject)+'」的资料'):'添加资料';
+ if(!curProject){L.innerHTML='<div style="color:var(--mut);font-size:12px">先在顶部选一个笔记本（或点 ＋ 新建）</div>';return}
+ try{const d=await (await fetch('/api/sources?project_id='+curProject)).json();sources=d.sources||[];document.getElementById('srcCount').textContent=String(sources.length);
+  if(!sources.length){L.innerHTML='<div style="color:var(--mut);font-size:12px">暂无资料</div>';return}
+  sources.forEach(s=>{const it=document.createElement('div');it.className='srcitem';
+   const ty=document.createElement('span');ty.className='ty';ty.textContent=SRC_TY[s.type]||s.type;it.appendChild(ty);
+   const nm=document.createElement('span');nm.className='nm';nm.textContent=s.name;nm.title=s.name;it.appendChild(nm);
+   const sz=document.createElement('span');sz.className='sz';sz.textContent=(s.chunks||0)+' 块';sz.title=(s.size||0)+' 字节';it.appendChild(sz);
+   const del=document.createElement('button');del.textContent='×';del.title='删除';del.onclick=async()=>{if(!del.dataset.armed){del.dataset.armed='1';del.textContent='确认';setTimeout(()=>{del.dataset.armed='';del.textContent='×'},2500);return}try{const r=await fetch('/api/sources/'+s.id,{method:'DELETE'});if(!r.ok)throw 0;renderSources();toast('已删除')}catch(e){toast('删除失败')}};it.appendChild(del);L.appendChild(it)})}
+ catch(e){L.innerHTML='<div style="color:var(--mut);font-size:12px">加载失败</div>'}}
+async function postSource(fd,okMsg){if(postSource.busy)return false;postSource.busy=true;toast('处理中…');
+ try{const r=await fetch('/api/sources',{method:'POST',body:fd});const d=await r.json().catch(()=>({}));
+  if(r.ok){renderSources();toast(okMsg+'（'+(d.chunks||0)+' 块）');return true}
+  toast(typeof d.detail==='string'?d.detail:'添加失败');return false}
+ catch(e){toast('添加失败');return false}finally{postSource.busy=false}}
+async function uploadSource(){const f=document.getElementById('srcFile').files[0];const t=document.getElementById('srcText').value;if(!curProject){toast('先选笔记本');return}
+ const fd=new FormData();fd.append('project_id',curProject);
+ if(f){if(t.trim())toast('将只添加文件');fd.append('file',f)}else if(t.trim())fd.append('text',t);else{toast('选文件、贴链接或粘贴文本');return}
+ if(await postSource(fd,'已添加')){document.getElementById('srcFile').value='';document.getElementById('srcFileName').textContent='';if(!f)document.getElementById('srcText').value=''}}
+async function addUrlSource(){const u=document.getElementById('srcUrl').value.trim();if(!curProject){toast('先选笔记本');return}if(!u){toast('先粘贴链接');return}
+ const fd=new FormData();fd.append('project_id',curProject);fd.append('url',u);
+ if(await postSource(fd,'已抓取'))document.getElementById('srcUrl').value=''}
+function hideCitePop(){document.getElementById('citePop').style.display='none'}
+function showCitePop(chip){const b=chip.closest('.msg-a');const list=(b&&b._cites)||[];const n=+chip.dataset.n;const c=list.find(x=>+x.n===n);if(!c)return;
+ const P=document.getElementById('citePop');P.innerHTML='';
+ const hd=document.createElement('div');hd.className='cp-hd';const nn=document.createElement('span');nn.className='cp-n';nn.textContent='['+n+']';hd.appendChild(nn);
+ const nm=document.createElement('span');nm.className='cp-nm';nm.textContent=c.source_name||'资料';nm.title=c.source_name||'';hd.appendChild(nm);P.appendChild(hd);
+ const tx=document.createElement('div');tx.className='cp-tx';tx.textContent=c.text||'';P.appendChild(tx);
+ const ft=document.createElement('div');ft.className='cp-ft';ft.textContent='原文第 '+c.start+'–'+c.end+' 字';P.appendChild(ft);
+ P.style.display='block';const r=chip.getBoundingClientRect();const w=P.offsetWidth,h=P.offsetHeight;
+ let x=Math.min(Math.max(8,r.left-20),innerWidth-w-8),y=r.bottom+6;if(y+h>innerHeight-8)y=Math.max(8,r.top-h-6);P.style.left=x+'px';P.style.top=y+'px'}
+function syncProjectFromCur(){const rid=curRootId();if(!rid)return;const n=nodesCache.find(x=>x.id===rid);if(!n)return;const pid=n.project_id||null;if(pid!==curProject)setProject(pid)}
+document.getElementById('projSel').onchange=e=>{const v=e.target.value||null;if(cur&&cur.nodeId&&cur.msgs&&cur.msgs.length){tabs.length=0;cur=null;renderTabs();renderMsgs();renderTree();refreshRoots()}setProject(v)};
+document.getElementById('projNew').onclick=()=>{const i=document.getElementById('projName');i.style.display='block';i.value='';i.focus();i.onblur=()=>{i.style.display='none'};i.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){const n=i.value;i.style.display='none';if(n&&n.trim())createProject(n.trim())}else if(e.key==='Escape'){i.style.display='none'}}};
 document.getElementById('srcBtn').onclick=openSrcPanel;
 document.getElementById('srcClose').onclick=closeSrcPanel;
 document.getElementById('srcPick').onclick=()=>document.getElementById('srcFile').click();
+document.getElementById('srcFile').onchange=e=>{const f=e.target.files[0];document.getElementById('srcFileName').textContent=f?f.name:''};
 document.getElementById('srcUpload').onclick=uploadSource;
-document.addEventListener('click',e=>{const c=e.target.closest('.cite');if(c){openSrcPanel();const n=c.dataset.n;setTimeout(()=>{const items=document.querySelectorAll('#srcList .srcitem');const idx=parseInt(n,10)-1;if(items[idx]){items[idx].scrollIntoView({block:'center'});items[idx].style.background='var(--acc-soft)';setTimeout(()=>{items[idx].style.background=''},1200)}},50)}});
+document.getElementById('srcUrlAdd').onclick=addUrlSource;
+document.getElementById('srcUrl').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)addUrlSource()};
+document.addEventListener('click',e=>{const c=e.target.closest('.cite');if(c){e.stopPropagation();showCitePop(c);return}if(!e.target.closest('#citePop'))hideCitePop()});
 function selInfo(){const s=getSelection();if(!s||s.isCollapsed||s.rangeCount===0)return null;
  const r=s.getRangeAt(0);const box=document.getElementById('msgs');
  if(!box.contains(r.commonAncestorContainer))return null;return{range:r,text:s.toString()}}
@@ -815,9 +878,9 @@ function closeTabsByIds(set){let ch=false;for(let i=tabs.length-1;i>=0;i--){if(s
  renderTabs();if(cur)switchTabMsgs(cur);else renderMsgs()}
 document.addEventListener('click',e=>{if(!e.target.closest('#treemenu'))hideTreeMenu();
  if(!e.target.closest('#tabmenu'))hideTabMenu();if(!e.target.closest('#pal')&&!e.target.closest('#menu'))hidePal();
- if(!e.target.closest('#srcPanel')&&!e.target.closest('#srcBtn')&&!e.target.closest('.cite'))closeSrcPanel()});
+ if(!e.target.closest('#srcPanel')&&!e.target.closest('#srcBtn')&&!e.target.closest('#projNew')&&!e.target.closest('.cite'))closeSrcPanel()});
 document.addEventListener('mousedown',e=>{if(e.button===1&&e.target.closest('#treeList,#treeGraph,#roots'))e.preventDefault()});
-document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const dr=document.getElementById('drawer');if(dr.classList.contains('open')){dr.classList.remove('open');return}if(document.getElementById('srcPanel').style.display==='block'){closeSrcPanel();return}if(selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
+document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;const dr=document.getElementById('drawer');if(dr.classList.contains('open')){dr.classList.remove('open');return}if(document.getElementById('citePop').style.display==='block'){hideCitePop();return}if(document.getElementById('srcPanel').style.display==='block'){closeSrcPanel();return}if(selNodes.size){selNodes.clear();syncBatchbar();renderTree()}});
 document.getElementById('send').onclick=()=>{send(document.getElementById('q').value);document.getElementById('q').value=''};
 document.getElementById('q').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)document.getElementById('send').click()};
 document.getElementById('send2').onclick=()=>{send(document.getElementById('q2').value);document.getElementById('q2').value=''};

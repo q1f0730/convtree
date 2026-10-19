@@ -245,7 +245,7 @@ check("PRAGMA foreign_keys=ON" in STORE_SRC, "外键pragma")
 check("sProv" in INK and "sSave" in INK and "sTest" in INK, "设置面板三件")
 check("/api/chat" in INK and "getReader" in INK, "SSE接线")
 check("function md(" in INK and "##" not in INK.split("function md(")[0][-50:], "md函数")
-for pat in ["#{1,4}", "\\*\\*", "<li>", "<pre", "mdOv(full)"]:
+for pat in ["#{1,4}", "\\*\\*", "<li>", "<pre", "mdOv(full,"]:
     check(pat in INK, "md特性" + pat[:8])
 check("/api/branch" in INK, "分支接线")
 check("/api/nodes/'+t.nodeId+'/rename" in INK or '/rename' in INK, "改名接线")
@@ -808,6 +808,21 @@ check(c.delete("/api/projects/prj_nope").status_code == 404, "删不存在笔记
 # D-101：新代码无改写原文
 check(not re.search(r"UPDATE\s+message\s+SET", STORE_SRC + MAIN_SRC + RAG_SRC + INGEST_SRC, re.I), "新代码无UPDATE message")
 check("citation" in STORE_SRC and "add_citations" in STORE_SRC, "引用独立表")
+# 前端（静态接线断言）
+check('id="projSel"' in INK and 'id="projNew"' in INK and "不使用笔记本" in INK, "前端笔记本选择器")
+check('id="srcBtn"' in INK and 'id="srcCount"' in INK, "资料入口带计数")
+check('id="srcUrl"' in INK and "fd.append('url'" in INK, "前端URL添加接线")
+check('accept=".txt,.md,.markdown,.pdf,.docx"' in INK, "文件类型限定")
+check("(s.chunks||0)+' 块'" in INK, "资料列表显示块数")
+check("method:'DELETE'" in INK and "/api/sources/'+s.id" in INK, "前端删资料接线")
+check("projectId:curProject" in INK, "新对话带笔记本")
+check("m[1]==='cites'" in INK and "cites:m.cites||[]" in INK, "前端接cites事件与落库引用")
+check('id="citePop"' in INK and "function showCitePop" in INK and "cp-tx" in INK, "引用气泡")
+check("function mdcite(h,cites)" in INK and "ok.has(n)" in INK, "仅对有效编号渲染chip")
+check("tx.textContent=c.text" in INK and "nm.textContent=c.source_name" in INK, "气泡用textContent防注入")
+check("syncProjectFromCur" in INK, "切换会话同步笔记本")
+check(INK.count("--acc-soft") >= 3 and ":root{--bg:" in INK, "沿用纸墨设计变量")
+check('id="empty"' in INK and 'id="boxrow"' in INK, "首屏仍为单输入框")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
