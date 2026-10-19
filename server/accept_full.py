@@ -639,6 +639,8 @@ _uc = store_mod.get_source(s_url)["content"]
 check("黑洞是引力强到光都无法逃逸的天体" in _uc, "HTML正文抽出")
 check("JSLEAK" not in _uc and "color:red" not in _uc and "导航菜单" not in _uc, "script/style/nav剔除")
 check("事件视界&奇点" in _uc, "HTML实体解码")
+_t, _plain = ingest_mod.html_to_text("<html><head><title>T</title><body><p>漏写head结束标签的正文</p></body>")
+check(_t == "T" and "漏写head结束标签的正文" in _plain, "缺</head>仍抽正文")
 ingest_mod.fetch_url = lambda u: ("text/plain", "纯文本网页：海豚用回声定位。".encode("utf-8"))
 r = c.post("/api/sources", data={"project_id": pid, "url": "http://example.com/a.txt"})
 check(r.status_code == 200 and "回声定位" in store_mod.get_source(r.json()["id"])["content"], "URL纯文本入库")

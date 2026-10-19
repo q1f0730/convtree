@@ -95,6 +95,8 @@ class _HTMLText(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag == "title":
             self._in_title = True
+        if tag == "body":  # 漏写 </head> 的页面：进 body 即解除 head 屏蔽
+            self.skip = 0
         if tag in self.SKIP:
             self.skip += 1
         elif tag in self.BLOCK:
