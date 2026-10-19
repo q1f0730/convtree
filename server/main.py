@@ -62,10 +62,15 @@ def _startup():
             print("auto_backup skip/fail: %s" % exc)
 
 
-def build_context(node_id, query=None):
+GROUNDING_RULES = ("请优先依据上面的【参考资料】回答。凡用到某条资料，在句末用方括号标注编号，如 [1] 或 [1][3]；"
+                   "只能使用上面出现过的编号，不要编造编号。资料里没有的内容要明说「资料未提及」，再视需要补充常识。")
+
+
+def build_context(node_id, query=None, with_cites=False):
     """D-107：上下文 = path(root→self) 上消息；兄弟/子excluded（path 天然不含）。
-    有 query 且根节点挂了项目时，RAG 检索结果前置为带 [n] 来源的 system 消息。"""
-    out = []
+    有 query 且根节点（path[0]）挂了笔记本时，检索结果前置为带 [n] 编号的 system 消息；
+    分支子节点经 path[0] 继承根的笔记本。with_cites=True 时返回 (messages, cites)。"""
+    out, cites = [], []
     path = store.node_path(node_id)
     for n in path:
         for m in store.list_messages(n["id"]):
@@ -75,16 +80,22 @@ def build_context(node_id, query=None):
             from server import rag
             pid = path[0].get("project_id")
             if pid:
-                hits = rag.retrieve(pid, query)
+                anchor = path[-1].get("anchor_text") or ""
+                q = query if not anchor else (query + "\n" + anchor)
+                hits = rag.retrieve(pid, q)
                 if hits:
                     lines = ["【参考资料】"]
                     for i, h in enumerate(hits, 1):
-                        lines.append("[%d] %s：%s" % (i, h.get("source_name", ""), h["text"]))
-                    lines.append("请基于以上资料回答，并标注引用来源（如 [1]）。")
+                        lines.append("[%d] 《%s》：%s" % (i, h.get("source_name", ""), h["text"]))
+                        cites.append({"n": i, "source_id": h.get("source_id"),
+                                      "source_name": h.get("source_name", ""),
+                                      "chunk_id": h.get("chunk_id"), "text": h["text"],
+                                      "start": h.get("start", 0), "end": h.get("end", 0)})
+                    lines.append(GROUNDING_RULES)
                     out.insert(0, {"role": "system", "content": "\n".join(lines)})
         except Exception as exc:
             print("rag retrieve failed: %s" % exc)  # 检索失败不拦聊天，但留痕
-    return out
+    return (out, cites) if with_cites else out
 
 
 def sse(event, data):
@@ -139,11 +150,16 @@ class SettingsIn(BaseModel):
     model: str | None = None
     apiKey: str | None = None
     clearKey: bool = False
+    embedBaseUrl: str | None = None
+    embedModel: str | None = None
+    embedKey: str | None = None
+    clearEmbedKey: bool = False
 
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "db": store.DB_PATH, "llm": llm.describe()}
+    from server import rag
+    return {"ok": True, "db": store.DB_PATH, "llm": llm.describe(), "rag": rag.backend()}
 
 
 @app.get("/api/version")
@@ -170,6 +186,14 @@ def put_settings(body: SettingsIn):
         patch["api_key"] = body.apiKey
     if body.clearKey:
         patch["api_key"] = ""
+    if body.embedBaseUrl is not None:
+        patch["embed_base_url"] = body.embedBaseUrl
+    if body.embedModel is not None:
+        patch["embed_model"] = body.embedModel
+    if body.embedKey:
+        patch["embed_key"] = body.embedKey
+    if body.clearEmbedKey:
+        patch["embed_key"] = ""
     app_settings.save(patch)
     return {"ok": True, "config": app_settings.public_config()}
 
@@ -193,7 +217,11 @@ def node_messages(node_id: str):
     path = store.node_path(node_id)
     if not path:
         raise HTTPException(404, "节点不存在")
-    return {"path": path, "messages": store.list_messages(node_id)}
+    cites = store.list_citations(node_id)
+    msgs = store.list_messages(node_id)
+    for m in msgs:
+        m["cites"] = cites.get(m["id"], [])
+    return {"path": path, "messages": msgs}
 
 
 @app.post("/api/nodes/{node_id}/suggest-title")
@@ -297,20 +325,6 @@ def get_notes():
     return {"notes": store.list_notes()}
 
 
-def _extract_pdf(raw):
-    import io
-    from pypdf import PdfReader
-    reader = PdfReader(io.BytesIO(raw))
-    return "\n".join((p.extract_text() or "") for p in reader.pages)
-
-
-def _extract_docx(raw):
-    import io
-    from docx import Document
-    doc = Document(io.BytesIO(raw))
-    return "\n".join(p.text for p in doc.paragraphs)
-
-
 class ProjectIn(BaseModel):
     name: str
 
@@ -352,44 +366,42 @@ def delete_project_ep(project_id: str):
 
 @app.post("/api/sources")
 async def upload_source(project_id: str = Form(...), name: str = Form(""),
-                        file: UploadFile | None = None, text: str = Form("")):
+                        file: UploadFile | None = None, text: str = Form(""),
+                        url: str = Form("")):
+    """资料入库：file（txt/md/pdf/docx）| url（抓网页）| text（粘贴），三选一，优先级同序。
+    入库即切块建索引（BM25，配了嵌入则顺带向量）；返回带 chunks 块数。"""
+    from server import ingest, rag
     try:
-        if file is not None:
+        if not store.get_project(project_id):
+            raise LookupError("笔记本不存在")
+        if file is not None and (file.filename or ""):
             raw = await file.read()
-            fname = file.filename or name or "未命名"
-            ftype = (fname.rsplit(".", 1)[-1].lower() if "." in fname else "text")
-            if ftype == "pdf":
-                try:
-                    content = _extract_pdf(raw)
-                except Exception:
-                    raise ValueError("PDF 无法解析")
-            elif ftype == "docx":
-                try:
-                    content = _extract_docx(raw)
-                except Exception:
-                    raise ValueError("Word 文档无法解析")
-            elif ftype in ("txt", "md", "markdown", "text"):
-                content = raw.decode("utf-8", errors="replace")
-            else:
-                raise ValueError("不支持的文件类型：%s" % ftype)
-            name = name or fname
+            ftype, content = ingest.extract_file(file.filename, raw)
+            name = (name or "").strip() or file.filename
             size = len(raw)
-        else:
-            content = text
-            ftype = "text"
-            name = name or "粘贴文本"
+        elif (url or "").strip():
+            ftype, title, content = ingest.extract_url(url)
+            name = (name or "").strip() or title
             size = len(content.encode("utf-8"))
-        if not (content or "").strip():
-            raise ValueError("内容为空")
+        else:
+            content = ingest.normalize(text)
+            ftype = "text"
+            name = (name or "").strip() or "粘贴文本"
+            size = len(content.encode("utf-8"))
+        if not content.strip():
+            raise ValueError("内容为空（没抽到文字）")
         src = store.add_source(project_id, name, content, type=ftype, size=size)
         try:
-            from server import rag
-            rag.index_source(src["id"], project_id, name, content)
+            src["chunks"] = rag.index_source(src["id"], project_id, name, content)
         except Exception as exc:
             print("rag index failed: %s" % exc)  # 索引失败不拦上传，但留痕
+            src["chunks"] = 0
+        src.pop("content", None)
         return src
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+    except ingest.UnsupportedType as exc:
+        raise HTTPException(415, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
@@ -436,19 +448,30 @@ async def chat(body: ChatIn):
             raise HTTPException(404, "节点不存在")
         node_id = body.nodeId
     else:
-        node_id = store.create_node(None, body.title or "未命名", project_id=body.projectId)["id"]
+        if body.projectId and not store.get_project(body.projectId):
+            raise HTTPException(404, "笔记本不存在")
+        node_id = store.create_node(None, body.title or "未命名", project_id=body.projectId or None)["id"]
     store.add_message(node_id, "user", text)
 
     try:
-        messages = build_context(node_id, query=text)
+        messages, cites = build_context(node_id, query=text, with_cites=True)
     except Exception:
         store.add_message(node_id, "assistant", "（生成失败：服务内部错误）")
         raise
     q: asyncio.Queue = asyncio.Queue()
     cancel = asyncio.Event()
 
+    def save_cites(mid):
+        if cites:
+            try:
+                store.add_citations(mid, cites)
+            except Exception as exc:
+                print("save citations failed: %s" % exc)
+
     async def run():
         full = ""
+        if cites:
+            await q.put(("cites", {"cites": cites}))
         try:
             async for chunk in llm.chat_stream(messages, cancel):
                 full += chunk
@@ -456,10 +479,12 @@ async def chat(body: ChatIn):
             if not full.strip():
                 full = "（生成失败：模型返回了空内容）"
             mid = store.add_message(node_id, "assistant", full)
-            await q.put(("done", {"nodeId": node_id, "messageId": mid["id"]}))
+            save_cites(mid["id"])
+            await q.put(("done", {"nodeId": node_id, "messageId": mid["id"], "cites": len(cites)}))
         except asyncio.CancelledError:
             if full.strip():
                 mid = store.add_message(node_id, "assistant", full + "（已停止）")
+                save_cites(mid["id"])
                 await q.put(("done", {"nodeId": node_id, "messageId": mid["id"], "cancelled": True}))
             else:
                 await q.put(("done", {"nodeId": node_id, "cancelled": True}))

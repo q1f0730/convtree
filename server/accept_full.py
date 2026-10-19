@@ -524,45 +524,290 @@ check("const panels={chat:true,note:false,tree:false}" in INK, "初始树相暂�
 check("#tree.nov" in INK, "无分叉时树面板整体隐藏")
 check('title="树"' in INK, "侧栏树图标title")
 
-# ── 项目与资料（RAG）──
+# ── 里程碑1 资料底座（E-0071）：笔记本 / 资料 / BM25 / 引用 ──
+import io as _io
+import sqlite3 as _sq3
 from server import rag as rag_mod
-check("project" in STORE_SRC and "source" in STORE_SRC, "project/source表")
-check("def create_project" in STORE_SRC and "def add_source" in STORE_SRC, "project/source CRUD函数")
-check(hasattr(rag_mod, "chunk_text") and hasattr(rag_mod, "index_source") and hasattr(rag_mod, "retrieve"), "rag三函数存在")
-check(rag_mod.chunk_text("abcdefghij", size=4, overlap=1) == ['abcd', 'defg', 'ghij', 'j'], "chunk_text切块")
-r = c.post("/api/projects", json={"name": "测试项目"})
-check(r.status_code == 200 and r.json()["name"] == "测试项目", "建项目")
+from server import ingest as ingest_mod
+INGEST_SRC = open(os.path.join(ROOT, "server", "ingest.py"), encoding="utf-8").read()
+RAG_SRC = open(os.path.join(ROOT, "server", "rag.py"), encoding="utf-8").read()
+REQ_SRC = open(os.path.join(ROOT, "requirements.txt"), encoding="utf-8").read()
+
+
+def sse_events(text):
+    out = []
+    for m in re.finditer(r'event: (\w+)\ndata: (.*)\n\n', text):
+        out.append((m.group(1), json.loads(m.group(2))))
+    return out
+
+
+# 零重依赖
+check("chromadb" not in REQ_SRC and "sentence-transformers" not in REQ_SRC and "torch" not in REQ_SRC, "requirements无重依赖")
+check("import chromadb" not in RAG_SRC and "sentence_transformers" not in RAG_SRC, "rag不引chroma/st")
+check("python-multipart" in REQ_SRC, "requirements含python-multipart")
+check(rag_mod.backend() == "bm25", "默认后端BM25")
+check(c.get("/api/health").json().get("rag") == "bm25", "health报告rag后端")
+# 分词
+tk = rag_mod.tokenize("咖啡豆 Coffee beans, the BM25!")
+check("咖啡" in tk and "啡豆" in tk, "中文字二元组")
+check("coffee" in tk and "beans" in tk and "bm25" in tk, "英文词小写")
+check("the" not in tk, "英文虚词去除")
+check(rag_mod.tokenize("我") == ["我"], "单字保留")
+check(rag_mod.tokenize("") == [], "空串无词")
+# 切块偏移
+check(rag_mod.chunk_text("abcdefghij", size=4, overlap=1) == ['abcd', 'defg', 'ghij'], "chunk_text切块")
+try:
+    rag_mod.chunk_spans("abc", size=4, overlap=4)
+    check(False, "overlap>=size应拒")
+except ValueError:
+    check(True, "overlap>=size拒绝")
+long_txt = ("第一段讲咖啡的烘焙。" * 30 + "\n\n" + "Second part is about tea brewing. " * 20).strip()
+sp = rag_mod.chunk_spans(long_txt, size=120, overlap=20)
+check(len(sp) > 3, "长文多块")
+check(all(0 <= a < b <= len(long_txt) for a, b in sp), "偏移在界内")
+check(all(long_txt[a:b] == long_txt[a:b].strip() for a, b in sp), "块首尾无空白")
+check(sp[-1][1] == len(long_txt), "末块到文末")
+check(all(sp[k + 1][0] > sp[k][0] for k in range(len(sp) - 1)), "块起点单调")
+
+# 笔记本 + 资料
+r = c.post("/api/projects", json={"name": "测试笔记本"})
+check(r.status_code == 200 and r.json()["name"] == "测试笔记本", "建笔记本")
 pid = r.json()["id"]
-check(any(p["id"] == pid for p in c.get("/api/projects").json()["projects"]), "列项目")
-check(c.put("/api/projects/" + pid, json={"name": "改名"}).json()["name"] == "改名", "项目改名")
-r = c.post("/api/chat", json={"text": "根问题", "projectId": pid})
-proj_root = sse_done(r.text)["nodeId"]
-r = c.post("/api/sources", data={"project_id": pid, "text": "咖啡产地决定风味。耶加雪菲有花香。"})
-check(r.status_code == 200 and r.json()["name"] == "粘贴文本", "上传文本资料")
-src_id = r.json()["id"]
-check(any(s["id"] == src_id for s in c.get("/api/sources?project_id=" + pid).json()["sources"]), "列资料")
+check(c.post("/api/projects", json={"name": "  "}).status_code == 400, "空名笔记本400")
+check(any(p["id"] == pid for p in c.get("/api/projects").json()["projects"]), "列笔记本")
+check(c.put("/api/projects/" + pid, json={"name": "改名本"}).json()["name"] == "改名本", "笔记本改名")
+TXT_ZH = "咖啡产地决定风味。耶加雪菲来自埃塞俄比亚，有明显的茉莉花香和柑橘果酸。\n\n深烘焙的曼特宁口感厚重，带草本和巧克力味。"
+TXT_EN = "Photosynthesis converts light energy into chemical energy. Chlorophyll absorbs red and blue light.\n\nThe Calvin cycle fixes carbon dioxide into sugar."
+r = c.post("/api/sources", data={"project_id": pid, "text": TXT_ZH, "name": "咖啡笔记"})
+check(r.status_code == 200 and r.json()["name"] == "咖啡笔记", "粘贴文本入库")
+check(r.json().get("chunks", 0) >= 1, "入库返回块数")
+check("content" not in r.json(), "入库回包不回全文")
+s_zh = r.json()["id"]
+r = c.post("/api/sources", data={"project_id": pid},
+           files={"file": ("bio.md", TXT_EN.encode("utf-8"), "text/markdown")})
+check(r.status_code == 200 and r.json()["type"] == "md" and r.json()["name"] == "bio.md", "md文件入库")
+s_en = r.json()["id"]
+r = c.post("/api/sources", data={"project_id": pid},
+           files={"file": ("gbk.txt", "国标编码的中文资料：普洱茶需要醒茶。".encode("gb18030"), "text/plain")})
+check(r.status_code == 200, "GB18030文本入库")
+s_gbk = r.json()["id"]
+r = c.post("/api/sources", data={"project_id": pid},
+           files={"file": ("crlf.txt", "第一行\r\n第二行\r\n".encode("utf-8"), "text/plain")})
+s_crlf = r.json()["id"]
+check("\r" not in store_mod.get_source(s_crlf)["content"], "换行归一为LF")
+from docx import Document as _Doc
+_d = _Doc()
+_d.add_paragraph("量子纠缠是两个粒子状态相关联的现象。")
+_d.add_paragraph("Entanglement survives distance.")
+_bio = _io.BytesIO()
+_d.save(_bio)
+r = c.post("/api/sources", data={"project_id": pid},
+           files={"file": ("q.docx", _bio.getvalue(), "application/octet-stream")})
+check(r.status_code == 200 and r.json()["type"] == "docx", "docx入库")
+s_docx = r.json()["id"]
+check("量子纠缠" in store_mod.get_source(s_docx)["content"], "docx抽出正文")
+# 手写最小 PDF（Helvetica 文本）
+_stream = b"BT /F1 18 Tf 72 720 Td (Mitochondria is the powerhouse of the cell) Tj ET"
+_objs = [b"<< /Type /Catalog /Pages 2 0 R >>",
+         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+         b"<< /Length %d >>\nstream\n" % len(_stream) + _stream + b"\nendstream",
+         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+_pdf = b"%PDF-1.4\n"
+_offs = []
+for _k, _o in enumerate(_objs, 1):
+    _offs.append(len(_pdf))
+    _pdf += b"%d 0 obj\n" % _k + _o + b"\nendobj\n"
+_xref = len(_pdf)
+_pdf += b"xref\n0 %d\n0000000000 65535 f \n" % (len(_objs) + 1) + b"".join(b"%010d 00000 n \n" % o for o in _offs)
+_pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(_objs) + 1, _xref)
+r = c.post("/api/sources", data={"project_id": pid},
+           files={"file": ("cell.pdf", _pdf, "application/pdf")})
+check(r.status_code == 200 and r.json()["type"] == "pdf", "pdf入库")
+s_pdf = r.json()["id"]
+check("Mitochondria" in store_mod.get_source(s_pdf)["content"], "pdf抽出正文")
+# URL（mock 抓取）
+_real_fetch = ingest_mod.fetch_url
+_HTML = ("<html><head><title>黑洞简介</title><style>.x{color:red}</style><script>var secret='JSLEAK';</script></head>"
+         "<body><nav>导航菜单</nav><h1>黑洞</h1><p>黑洞是引力强到光都无法逃逸的天体。</p><p>事件视界&amp;奇点。</p></body></html>")
+ingest_mod.fetch_url = lambda u: ("text/html; charset=utf-8", _HTML.encode("utf-8"))
+r = c.post("/api/sources", data={"project_id": pid, "url": "https://example.com/bh"})
+check(r.status_code == 200 and r.json()["type"] == "url", "URL入库200")
+check(r.json()["name"] == "黑洞简介", "URL用title命名")
+s_url = r.json()["id"]
+_uc = store_mod.get_source(s_url)["content"]
+check("黑洞是引力强到光都无法逃逸的天体" in _uc, "HTML正文抽出")
+check("JSLEAK" not in _uc and "color:red" not in _uc and "导航菜单" not in _uc, "script/style/nav剔除")
+check("事件视界&奇点" in _uc, "HTML实体解码")
+ingest_mod.fetch_url = lambda u: ("text/plain", "纯文本网页：海豚用回声定位。".encode("utf-8"))
+r = c.post("/api/sources", data={"project_id": pid, "url": "http://example.com/a.txt"})
+check(r.status_code == 200 and "回声定位" in store_mod.get_source(r.json()["id"])["content"], "URL纯文本入库")
+s_url2 = r.json()["id"]
+check(c.post("/api/sources", data={"project_id": pid, "url": "ftp://example.com/x"}).status_code == 400, "非http URL 400")
+check(c.post("/api/sources", data={"project_id": pid, "url": "不是网址"}).status_code == 400, "乱写URL 400")
+
+
+def _boom(u):
+    raise ValueError("URL 抓取失败：ConnectError")
+
+
+ingest_mod.fetch_url = _boom
+r = c.post("/api/sources", data={"project_id": pid, "url": "https://down.example.com/"})
+check(r.status_code == 400 and "抓取失败" in r.json()["detail"], "抓取失败400")
+ingest_mod.fetch_url = lambda u: ("text/html", b"<html><body><script>x()</script></body></html>")
+check(c.post("/api/sources", data={"project_id": pid, "url": "https://empty.example.com/"}).status_code == 400, "空网页400")
+ingest_mod.fetch_url = _real_fetch
+# 失败模式
+check(c.post("/api/sources", data={"project_id": pid},
+             files={"file": ("empty.txt", b"", "text/plain")}).status_code == 400, "空文件400")
+check(c.post("/api/sources", data={"project_id": pid},
+             files={"file": ("blank.txt", b"  \n\n ", "text/plain")}).status_code == 400, "纯空白文件400")
+check(c.post("/api/sources", data={"project_id": pid},
+             files={"file": ("a.exe", b"MZ\x90\x00", "application/octet-stream")}).status_code == 415, "不支持类型415")
+check(c.post("/api/sources", data={"project_id": pid},
+             files={"file": ("noext", b"hello", "application/octet-stream")}).status_code == 415, "无扩展名415")
+check(c.post("/api/sources", data={"project_id": pid},
+             files={"file": ("bad.pdf", b"not a pdf", "application/pdf")}).status_code == 400, "坏PDF 400")
+check(c.post("/api/sources", data={"project_id": pid},
+             files={"file": ("bad.docx", b"PK-not-docx", "application/octet-stream")}).status_code == 400, "坏docx 400")
+check(c.post("/api/sources", data={"project_id": pid, "text": "   "}).status_code == 400, "空粘贴400")
+check(c.post("/api/sources", data={"project_id": "prj_nope", "text": "x"}).status_code == 404, "笔记本不存在404")
+check(c.post("/api/sources", data={"text": "x"}).status_code == 422, "缺project_id 422")
+# 列表带块数
+srcs = c.get("/api/sources?project_id=" + pid).json()["sources"]
+check(len(srcs) == 8, "列资料8条")
+check(all(sv.get("chunks", 0) >= 1 for sv in srcs), "每条资料有块数")
+# 偏移 = 原文切片（被消费数据断言）
+_con = _sq3.connect(DB)
+_rows = _con.execute("SELECT c.start,c.end_pos,c.text,s.content FROM chunk c JOIN source s ON s.id=c.source_id WHERE c.project_id=?", (pid,)).fetchall()
+_con.close()
+check(len(_rows) >= 8, "块已落SQLite")
+check(all(rw[3][rw[0]:rw[1]] == rw[2] for rw in _rows), "块文==原文[start:end]")
+# BM25 检索
+h = rag_mod.retrieve(pid, "耶加雪菲是什么香味")
+check(bool(h) and h[0]["source_id"] == s_zh, "中文检索命中正确资料")
+check(all(k in h[0] for k in ("chunk_id", "source_name", "text", "start", "end", "score")), "检索结果字段齐")
+h = rag_mod.retrieve(pid, "How does chlorophyll absorb light?")
+check(bool(h) and h[0]["source_id"] == s_en, "英文检索命中")
+h = rag_mod.retrieve(pid, "普洱")
+check(bool(h) and h[0]["source_id"] == s_gbk, "GB18030资料可检索")
+h = rag_mod.retrieve(pid, "mitochondria powerhouse")
+check(bool(h) and h[0]["source_id"] == s_pdf, "PDF资料可检索")
+check(rag_mod.retrieve(pid, "zzzqqq 无关词汇鑫") == [], "无关查询返回空")
+check(rag_mod.retrieve(pid, "") == [], "空查询返回空")
+check(rag_mod.retrieve("prj_nope", "咖啡") == [], "空笔记本返回空")
+check(len(rag_mod.retrieve(pid, "的", top_k=2)) <= 2, "top_k生效")
+# 混合后端（嵌入 mock）+ 失败回落
+_real_embed = rag_mod._embed
+c.post("/api/settings", json={"embedModel": "text-embedding-v3", "embedBaseUrl": "https://emb.example/v1", "embedKey": "sk-emb-123456789"})
+check(rag_mod.backend() == "hybrid", "配嵌入后为hybrid")
+check(rag_mod.embed_config()[0] == "https://emb.example/v1", "嵌入base可单独配")
+_pc = c.get("/api/settings").json()["config"]
+check(_pc.get("embed_model") == "text-embedding-v3" and _pc.get("has_embed_key") is True, "嵌入配置可读")
+check("sk-emb-123456789" not in json.dumps(_pc), "嵌入密钥不回明文")
+_calls = []
+
+
+def _fake_embed(texts):
+    _calls.append(len(texts))
+    return [[1.0 if "咖啡" in t or "耶加雪菲" in t else 0.0, 1.0 if "light" in t.lower() else 0.0, 0.1] for t in texts]
+
+
+rag_mod._embed = _fake_embed
+h = rag_mod.retrieve(pid, "耶加雪菲")
+check(bool(h) and h[0]["source_id"] == s_zh, "hybrid检索命中")
+check(sum(_calls) >= len(_rows), "缺向量的块就地补嵌")
+_con = _sq3.connect(DB)
+check(_con.execute("SELECT COUNT(*) FROM chunk WHERE project_id=? AND embedding IS NULL", (pid,)).fetchone()[0] == 0, "补嵌后向量落库")
+_con.close()
+
+
+def _bad_embed(texts):
+    raise RuntimeError("embedding down")
+
+
+rag_mod._embed = _bad_embed
+h = rag_mod.retrieve(pid, "耶加雪菲")
+check(bool(h) and h[0]["source_id"] == s_zh, "嵌入失败回落BM25")
+r = c.post("/api/sources", data={"project_id": pid, "text": "嵌入挂了也能入库的资料：银杏是活化石。"})
+check(r.status_code == 200 and r.json()["chunks"] >= 1, "嵌入失败入库不拦")
+s_gingko = r.json()["id"]
+rag_mod._embed = _real_embed
+c.post("/api/settings", json={"embedModel": "", "embedBaseUrl": "", "clearEmbedKey": True})
+check(rag_mod.backend() == "bm25", "清嵌入配置回BM25")
+# 有据回答：cites SSE + 落库 + 不改 message.content
+r = c.post("/api/chat", json={"text": "耶加雪菲有什么风味？", "projectId": pid})
+ev = sse_events(r.text)
+names = [e[0] for e in ev]
+check("cites" in names, "SSE含cites事件")
+check(names.index("cites") < names.index("delta"), "cites先于正文")
+cites_ev = [e[1] for e in ev if e[0] == "cites"][0]["cites"]
+check([ct["n"] for ct in cites_ev] == list(range(1, len(cites_ev) + 1)), "引用编号1..k")
+check(cites_ev[0]["source_id"] == s_zh and cites_ev[0]["source_name"] == "咖啡笔记", "引用指向资料id/名")
+_src_zh = store_mod.get_source(s_zh)["content"]
+check(_src_zh[cites_ev[0]["start"]:cites_ev[0]["end"]] == cites_ev[0]["text"], "引用偏移指向原文段")
+d = sse_done(r.text)
+nb_root, nb_mid = d["nodeId"], d["messageId"]
+check(d.get("cites") == len(cites_ev), "done带引用数")
+streamed = "".join(e[1]["text"] for e in ev if e[0] == "delta")
+msgs = c.get("/api/nodes/%s/messages" % nb_root).json()["messages"]
+am = [m for m in msgs if m["id"] == nb_mid][0]
+check(am["content"] == streamed, "message.content==流式原文（未注入引用）")
+check(len(am["cites"]) == len(cites_ev) and am["cites"][0]["text"] == cites_ev[0]["text"], "引用随消息落库可取回")
+check([m for m in msgs if m["role"] == "user"][0]["cites"] == [], "用户消息无引用")
+check("[1]" in am["content"], "mock回答含[1]示例")
+ctx, cc = build_context(nb_root, query="曼特宁口感", with_cites=True)
+check(ctx[0]["role"] == "system" and "【参考资料】" in ctx[0]["content"] and "[1]" in ctx[0]["content"], "上下文前置参考资料")
+check("资料未提及" in ctx[0]["content"], "提示不编造")
+check(bool(cc) and cc[0]["source_id"] == s_zh, "build_context回传引用")
+check(store_mod.node_path(nb_root)[0]["project_id"] == pid, "根节点挂笔记本")
+# 分支继承 path[0] 的笔记本
+br = c.post("/api/branch", json={"parentId": nb_root, "anchorText": "茉莉花香"}).json()["node"]
+check(not br.get("project_id"), "分支节点自身不存笔记本")
+r = c.post("/api/chat", json={"nodeId": br["id"], "text": "Calvin cycle 是什么"})
+ev2 = sse_events(r.text)
+check("cites" in [e[0] for e in ev2], "分支提问同样有引用")
+c2 = [e[1] for e in ev2 if e[0] == "cites"][0]["cites"]
+check(any(ct["source_id"] == s_en for ct in c2), "分支检索用根笔记本资料")
+br2 = c.post("/api/branch", json={"parentId": br["id"], "anchorText": "孙节点"}).json()["node"]
+_, cc3 = build_context(br2["id"], query="黑洞事件视界", with_cites=True)
+check(any(ct["source_id"] == s_url for ct in cc3), "孙节点也继承")
+# 无笔记本 → 无引用
+r = c.post("/api/chat", json={"text": "耶加雪菲有什么风味？"})
+check("event: cites" not in r.text, "无笔记本不发cites")
+check(c.post("/api/chat", json={"text": "x", "projectId": "prj_nope"}).status_code == 404, "坏笔记本id 404")
+# 检索失败不拦聊天
 _real_retrieve = rag_mod.retrieve
-rag_mod.retrieve = lambda p, q, top_k=None: [{"text": "耶加雪菲有花香", "source_name": "咖啡资料", "score": 0.9}]
-ctx = build_context(proj_root, query="咖啡风味")
-check(bool(ctx) and ctx[0]["role"] == "system" and "[1]" in ctx[0]["content"] and "耶加雪菲" in ctx[0]["content"], "build_context带资料前置")
+
+
+def _rboom(*a, **k):
+    raise RuntimeError("retrieve down")
+
+
+rag_mod.retrieve = _rboom
+r = c.post("/api/chat", json={"text": "仍能回答吗", "projectId": pid})
+check(r.status_code == 200 and "event: done" in r.text and "event: cites" not in r.text, "检索异常聊天照常")
 rag_mod.retrieve = _real_retrieve
-import tempfile
-rag_mod.CHROMA_DIR = tempfile.mkdtemp()
-rag_mod.reset()
-rag_mod._embed = lambda texts: [[1.0, 0.0] for _ in texts]
-check(rag_mod.index_source("src_test", pid, "测试资料", "耶加雪菲有花香果酸。") > 0, "index_source切块入库")
-hits = rag_mod.retrieve(pid, "花香")
-check(bool(hits) and "耶加雪菲" in hits[0]["text"], "retrieve命中")
-rag_mod.delete_source_chunks("src_test")
-check(rag_mod.retrieve(pid, "花香") == [], "删资料后检索空")
-rag_mod.reset()
-c.delete("/api/sources/" + src_id)
-check(c.get("/api/sources?project_id=" + pid).json()["sources"] == [], "删资料")
-c.delete("/api/projects/" + pid)
-check(c.get("/api/projects").json()["projects"] == [], "删项目级联")
-check('id="projSel"' in INK and 'id="srcBtn"' in INK, "前端项目选择器与上传入口")
-check("projectId" in INK, "前端传projectId")
-check("mdcite" in INK, "前端来源标注渲染")
+# 删除：块随资料走；引用是快照仍可读
+r = c.delete("/api/sources/" + s_zh)
+check(r.status_code == 200, "删资料")
+_con = _sq3.connect(DB)
+check(_con.execute("SELECT COUNT(*) FROM chunk WHERE source_id=?", (s_zh,)).fetchone()[0] == 0, "删资料清块")
+_con.close()
+check(all(hh["source_id"] != s_zh for hh in rag_mod.retrieve(pid, "耶加雪菲")), "删后检索不到")
+am2 = [m for m in c.get("/api/nodes/%s/messages" % nb_root).json()["messages"] if m["id"] == nb_mid][0]
+check(am2["cites"] and am2["cites"][0]["source_name"] == "咖啡笔记", "删资料后引用快照仍在")
+check(c.delete("/api/sources/src_nope").status_code == 404, "删不存在资料404")
+r = c.delete("/api/projects/" + pid)
+check(r.status_code == 200 and c.get("/api/sources?project_id=" + pid).json()["sources"] == [], "删笔记本级联资料")
+_con = _sq3.connect(DB)
+check(_con.execute("SELECT COUNT(*) FROM chunk WHERE project_id=?", (pid,)).fetchone()[0] == 0, "删笔记本清块")
+_con.close()
+check(c.get("/api/nodes/%s/messages" % nb_root).status_code == 200, "删笔记本后会话仍可读")
+check(c.delete("/api/projects/prj_nope").status_code == 404, "删不存在笔记本404")
+# D-101：新代码无改写原文
+check(not re.search(r"UPDATE\s+message\s+SET", STORE_SRC + MAIN_SRC + RAG_SRC + INGEST_SRC, re.I), "新代码无UPDATE message")
+check("citation" in STORE_SRC and "add_citations" in STORE_SRC, "引用独立表")
 
 print("")
 print("共 %d 例，失败 %d" % (N[0], len(fails)))
