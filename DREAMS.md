@@ -26,7 +26,7 @@
   6. 分支子节点经 path[0] 继承根的笔记本，子节点提问同样产出引用。
   7. 前端 demo/ink.html：笔记本/资料面板（建笔记本、列/加/删资料、显示块数）、在笔记本内开新对话、回答里 [n] 可点开气泡显示资料名+原文段。
   8. 三道闸 exit 0：`python server/accept_full.py`、`python tools/check_invariants.py --all`、`python tools/ledger.py verify`。
-  账本：E-0071
+  账本：E-0071（artifact E-0072/E-0073，verification E-0074/E-0075；标准 1–6、8 已由验收脚本判定通过，标准 7 待用户浏览器走查后出库）
 
 ```
 - [ ] <one-line target>（proposer, date）
