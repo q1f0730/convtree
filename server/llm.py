@@ -33,7 +33,10 @@ def mock_reply(messages):
         if m.get("role") == "user":
             last = m.get("content", "")
             break
-    return "（未配置模型，这是本地 mock 回复）你问的是：「%s」。去设置里填好服务商与密钥，即可接真模型。" % last[:120]
+    text = "（未配置模型，这是本地 mock 回复）你问的是：「%s」。去设置里填好服务商与密钥，即可接真模型。" % last[:120]
+    if any(m.get("role") == "system" and "【参考资料】" in (m.get("content") or "") for m in messages):
+        text += "（mock 引用示例：见资料 [1]）"
+    return text
 
 
 def chat_sync(messages):

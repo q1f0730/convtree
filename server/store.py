@@ -68,6 +68,33 @@ CREATE TABLE IF NOT EXISTS source (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_source_project ON source(project_id);
+CREATE TABLE IF NOT EXISTS chunk (
+  id         TEXT PRIMARY KEY,
+  source_id  TEXT NOT NULL REFERENCES source(id),
+  project_id TEXT NOT NULL,
+  idx        INTEGER NOT NULL,
+  start      INTEGER NOT NULL,
+  end_pos    INTEGER NOT NULL,
+  text       TEXT NOT NULL,
+  tokens     TEXT NOT NULL,
+  tok_len    INTEGER NOT NULL,
+  embedding  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_chunk_project ON chunk(project_id);
+CREATE INDEX IF NOT EXISTS idx_chunk_source ON chunk(source_id);
+CREATE TABLE IF NOT EXISTS citation (
+  id          TEXT PRIMARY KEY,
+  message_id  TEXT NOT NULL REFERENCES message(id),
+  n           INTEGER NOT NULL,
+  source_id   TEXT,
+  source_name TEXT NOT NULL,
+  chunk_id    TEXT,
+  text        TEXT NOT NULL,
+  start       INTEGER NOT NULL,
+  end_pos     INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cite_msg ON citation(message_id);
 """
 
 
@@ -381,6 +408,7 @@ def delete_project(project_id):
     try:
         if not conn.execute("SELECT 1 FROM project WHERE id=?", (project_id,)).fetchone():
             raise LookupError("项目不存在")
+        conn.execute("DELETE FROM chunk WHERE project_id=?", (project_id,))
         conn.execute("DELETE FROM source WHERE project_id=?", (project_id,))
         conn.execute("UPDATE node SET project_id=NULL WHERE project_id=?", (project_id,))
         conn.execute("DELETE FROM project WHERE id=?", (project_id,))
@@ -413,7 +441,9 @@ def list_sources(project_id):
     conn = connect()
     try:
         return [dict(r) for r in conn.execute(
-            "SELECT id,project_id,name,type,size,created_at FROM source WHERE project_id=? ORDER BY created_at",
+            "SELECT s.id,s.project_id,s.name,s.type,s.size,s.created_at,"
+            " (SELECT COUNT(*) FROM chunk c WHERE c.source_id=s.id) AS chunks"
+            " FROM source s WHERE s.project_id=? ORDER BY s.created_at",
             (project_id,))]
     finally:
         conn.close()
@@ -422,6 +452,7 @@ def list_sources(project_id):
 def delete_source(source_id):
     conn = connect()
     try:
+        conn.execute("DELETE FROM chunk WHERE source_id=?", (source_id,))
         cur = conn.execute("DELETE FROM source WHERE id=?", (source_id,))
         conn.commit()
         if cur.rowcount == 0:
@@ -442,3 +473,115 @@ def set_node_project(node_id, project_id):
     finally:
         conn.close()
     return {"id": node_id, "project_id": project_id}
+
+
+def get_project(project_id):
+    conn = connect()
+    try:
+        r = conn.execute("SELECT * FROM project WHERE id=?", (project_id,)).fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+def get_source(source_id):
+    conn = connect()
+    try:
+        r = conn.execute("SELECT * FROM source WHERE id=?", (source_id,)).fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+# ── 检索块（rag.py 的持久层；偏移 = source.content 的字符偏移）──
+
+def replace_chunks(source_id, project_id, rows):
+    """rows: [{idx,start,end,text,tokens(list),embedding(list|None)}]。先删后插（重索引不留孤儿）。"""
+    conn = connect()
+    try:
+        conn.execute("BEGIN")
+        conn.execute("DELETE FROM chunk WHERE source_id=?", (source_id,))
+        for r in rows:
+            emb = r.get("embedding")
+            conn.execute("INSERT INTO chunk(id,source_id,project_id,idx,start,end_pos,text,tokens,tok_len,embedding)"
+                         " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                         (uid("ck"), source_id, project_id, r["idx"], r["start"], r["end"], r["text"],
+                          " ".join(r["tokens"]), len(r["tokens"]),
+                          json.dumps(emb) if emb else None))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+    return len(rows)
+
+
+def list_chunks(project_id):
+    """某笔记本的全部块（含资料名），供 BM25/向量打分。"""
+    conn = connect()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT c.id,c.source_id,c.project_id,c.idx,c.start,c.end_pos AS \"end\",c.text,c.tokens,c.tok_len,"
+            " c.embedding,s.name AS source_name FROM chunk c JOIN source s ON s.id=c.source_id"
+            " WHERE c.project_id=? ORDER BY c.source_id,c.idx", (project_id,))]
+    finally:
+        conn.close()
+
+
+def set_chunk_embeddings(pairs):
+    """pairs: [(chunk_id, vector)]。只写 chunk.embedding，不碰消息。"""
+    conn = connect()
+    try:
+        for cid, vec in pairs:
+            conn.execute("UPDATE chunk SET embedding=? WHERE id=?", (json.dumps(vec), cid))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_chunks(source_id):
+    conn = connect()
+    try:
+        cur = conn.execute("DELETE FROM chunk WHERE source_id=?", (source_id,))
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+# ── 引用（回答的 [n] → 资料片段；独立表，message.content 不动 D-101）──
+
+def add_citations(message_id, cites):
+    ts = now_ms()
+    conn = connect()
+    try:
+        if not conn.execute("SELECT 1 FROM message WHERE id=?", (message_id,)).fetchone():
+            raise LookupError("消息不存在")
+        for c in cites:
+            conn.execute("INSERT INTO citation(id,message_id,n,source_id,source_name,chunk_id,text,start,end_pos,created_at)"
+                         " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                         (uid("ct"), message_id, int(c["n"]), c.get("source_id"), c.get("source_name") or "",
+                          c.get("chunk_id"), c.get("text") or "", int(c.get("start") or 0),
+                          int(c.get("end") or 0), ts))
+        conn.commit()
+    finally:
+        conn.close()
+    return len(cites)
+
+
+def list_citations(node_id):
+    """某节点全部消息的引用，按 message_id 分组。"""
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT c.message_id,c.n,c.source_id,c.source_name,c.chunk_id,c.text,c.start,c.end_pos AS \"end\""
+            " FROM citation c JOIN message m ON m.id=c.message_id WHERE m.node_id=? ORDER BY c.message_id,c.n",
+            (node_id,)).fetchall()
+    finally:
+        conn.close()
+    out = {}
+    for r in rows:
+        d = dict(r)
+        out.setdefault(d.pop("message_id"), []).append(d)
+    return out

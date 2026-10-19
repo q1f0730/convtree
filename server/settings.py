@@ -35,7 +35,9 @@ PROVIDERS = {
     "custom": {"name": "自定义", "base_url": "", "models": [], "default_model": "", "need_key": False},
 }
 
-DEFAULTS = {"provider": "dashscope", "base_url": "", "model": "", "api_key": ""}
+DEFAULTS = {"provider": "dashscope", "base_url": "", "model": "", "api_key": "",
+            # 可选嵌入后端（空 = 只用 BM25）；base/key 留空时回落聊天端点
+            "embed_base_url": "", "embed_model": "", "embed_key": ""}
 
 
 def load():
@@ -93,4 +95,7 @@ def public_config():
     cfg = load()
     return {"provider": cfg.get("provider", ""), "base_url": cfg.get("base_url", ""),
             "model": cfg.get("model", ""), "has_key": bool(cfg.get("api_key")),
-            "key_masked": masked(cfg.get("api_key", "")), "configured": is_configured()}
+            "key_masked": masked(cfg.get("api_key", "")), "configured": is_configured(),
+            "embed_base_url": cfg.get("embed_base_url", ""), "embed_model": cfg.get("embed_model", ""),
+            "has_embed_key": bool(cfg.get("embed_key")),
+            "embed_key_masked": masked(cfg.get("embed_key", ""))}
