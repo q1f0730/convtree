@@ -323,6 +323,112 @@ os.environ.pop("CONVTREE_URL_ALLOWLIST")
 
 
 # ════════════════════════════════════════════════════════════════════
+section("03 空间：迁移（旧库 NULL 数据 → 默认空间，幂等）")
+import sqlite3  # noqa: E402
+OLD = os.path.join(TMP, "old.db")
+_c = sqlite3.connect(OLD)
+_c.executescript("""
+CREATE TABLE node (id TEXT PRIMARY KEY, parent_id TEXT, title TEXT NOT NULL, anchor_text TEXT, color TEXT,
+  created_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, project_id TEXT);
+CREATE TABLE message (id TEXT PRIMARY KEY, node_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE note (id TEXT PRIMARY KEY, text TEXT NOT NULL, from_node TEXT, from_name TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+CREATE TABLE project (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL);
+INSERT INTO project VALUES ('prj_aaaaaaaaaaaa','旧笔记本',1);
+INSERT INTO node VALUES ('nd_000000000001',NULL,'游离树',NULL,NULL,1,0,NULL);
+INSERT INTO node VALUES ('nd_000000000002','nd_000000000001','子',NULL,NULL,2,0,NULL);
+INSERT INTO node VALUES ('nd_000000000003',NULL,'挂本树',NULL,NULL,3,0,'prj_aaaaaaaaaaaa');
+INSERT INTO message VALUES ('msg_1','nd_000000000001','user','老问题',1);
+INSERT INTO note VALUES ('note_1','游离笔记',NULL,'',1);
+INSERT INTO note VALUES ('note_2','挂本笔记','nd_000000000003','挂本树',2);
+INSERT INTO note VALUES ('note_3','子节点笔记','nd_000000000002','子',3);
+""")
+_c.commit()
+_c.close()
+_saved_db = store.DB_PATH
+store.DB_PATH = OLD
+store.init_db()
+store.init_db()   # 幂等：二次迁移不重复建默认空间
+_c = sqlite3.connect(OLD)
+_defaults = _c.execute("SELECT id FROM project WHERE name='默认空间'").fetchall()
+check(len(_defaults) == 1, "test_migration_creates_one_default_space（幂等）")
+_d = _defaults[0][0]
+check(_c.execute("SELECT project_id FROM node WHERE id='nd_000000000001'").fetchone()[0] == _d, "游离根节点进默认空间")
+check(_c.execute("SELECT project_id FROM node WHERE id='nd_000000000003'").fetchone()[0] == "prj_aaaaaaaaaaaa", "已挂空间的根不动")
+_notes = dict(_c.execute("SELECT id, project_id FROM note").fetchall())
+check(_notes == {"note_1": _d, "note_2": "prj_aaaaaaaaaaaa", "note_3": _d}, "test_migration_scopes_notes：笔记按来源树归空间，无来源进默认")
+check(_c.execute("SELECT content FROM message WHERE id='msg_1'").fetchone()[0] == "老问题", "迁移不动消息原文")
+_c.close()
+store.DB_PATH = _saved_db
+
+section("03 空间：CRUD + 钻研目标 + 真计数")
+r = client.post("/api/spaces", json={"name": "软件工程期末", "goal": "弄懂瀑布与敏捷的取舍"})
+check(r.status_code == 200 and r.json().get("goal") == "弄懂瀑布与敏捷的取舍", "test_create_space_with_goal")
+SP = r.json()["id"]
+check(client.post("/api/spaces", json={"name": "  "}).status_code == 400, "空名 400")
+r = client.put("/api/spaces/" + SP, json={"goal": "弄懂瀑布、敏捷与螺旋模型"})
+check(r.status_code == 200 and r.json()["goal"] == "弄懂瀑布、敏捷与螺旋模型" and r.json()["name"] == "软件工程期末", "改目标不动名称")
+r = client.put("/api/spaces/" + SP, json={"name": "软工"})
+check(r.json()["name"] == "软工" and r.json()["goal"] == "弄懂瀑布、敏捷与螺旋模型", "改名不动目标")
+check(client.put("/api/spaces/prj_nope", json={"name": "x"}).status_code == 404, "改不存在空间 404")
+client.post("/api/sources", data={"project_id": SP, "text": "瀑布模型要求前期冻结需求。", "name": "a"})
+client.post("/api/sources", data={"project_id": SP, "text": "敏捷开发以迭代交付。", "name": "b"})
+r = client.post("/api/chat", json={"text": "树一", "spaceId": SP})
+t1 = [d for e, d in sse_events(r.text) if e == "done"][0]["nodeId"]
+client.post("/api/chat", json={"text": "树二", "projectId": SP})
+client.post("/api/branch", json={"parentId": t1, "anchorText": "树一"})   # 分支不算新树
+client.post("/api/notes", json={"text": "空间笔记", "fromNode": t1})
+sp = [x for x in client.get("/api/spaces").json()["spaces"] if x["id"] == SP][0]
+check(sp["trees"] == 2 and sp["sources"] == 2 and sp["notes"] == 1, "test_space_overview_real_counts（树2 资料2 笔记1）")
+check(any(x["name"] == "默认空间" for x in client.get("/api/spaces").json()["spaces"]), "默认空间存在")
+check(any(x["id"] == SP and x.get("goal") for x in client.get("/api/projects").json()["projects"]), "旧 /api/projects 别名可用且带 goal")
+
+section("03 空间：对话树与笔记按空间隔离")
+SP2 = client.post("/api/spaces", json={"name": "线代"}).json()["id"]
+client.post("/api/chat", json={"text": "线代树", "spaceId": SP2})
+client.post("/api/notes", json={"text": "线代笔记", "spaceId": SP2})
+roots1 = [n for n in client.get("/api/nodes?space_id=" + SP).json()["nodes"] if not n["parent_id"]]
+check(len(roots1) == 2 and all(n["project_id"] == SP for n in roots1), "test_nodes_filtered_by_space")
+check(len(client.get("/api/nodes?space_id=" + SP).json()["nodes"]) == 3, "按空间取节点含分支")
+n1 = [x["text"] for x in client.get("/api/notes?space_id=" + SP).json()["notes"]]
+n2 = [x["text"] for x in client.get("/api/notes?space_id=" + SP2).json()["notes"]]
+check(n1 == ["空间笔记"] and n2 == ["线代笔记"], "test_notes_scoped_per_space")
+r = client.post("/api/chat", json={"text": "无空间新对话"})
+nd = [d for e, d in sse_events(r.text) if e == "done"][0]["nodeId"]
+dflt = [x for x in client.get("/api/spaces").json()["spaces"] if x["name"] == "默认空间"][0]["id"]
+check(any(n["id"] == nd for n in client.get("/api/nodes?space_id=" + dflt).json()["nodes"]), "不指定空间 ⇒ 落默认空间")
+
+section("03 空间：钻研目标进系统提示")
+client.post("/api/settings", json={"provider": "custom", "baseUrl": UPBASE, "apiKey": "sk-x-123456789"})
+Upstream.GOT.clear()
+client.post("/api/chat", json={"nodeId": t1, "text": "瀑布模型的风险？"})
+body = json.loads([g["body"] for g in Upstream.GOT if "/chat/completions" in g["path"]][-1])
+sys_txt = "\n".join(m["content"] for m in body["messages"] if m["role"] == "system")
+check("弄懂瀑布、敏捷与螺旋模型" in sys_txt, "test_space_goal_in_system_prompt")
+br = client.post("/api/branch", json={"parentId": t1, "anchorText": "风险"}).json()["node"]["id"]
+Upstream.GOT.clear()
+client.post("/api/chat", json={"nodeId": br, "text": "展开"})
+body = json.loads([g["body"] for g in Upstream.GOT if "/chat/completions" in g["path"]][-1])
+check(any("弄懂瀑布、敏捷与螺旋模型" in m["content"] for m in body["messages"] if m["role"] == "system"), "分支也继承钻研目标")
+Upstream.GOT.clear()
+client.post("/api/chat", json={"text": "线代问题", "spaceId": SP2})
+body = json.loads([g["body"] for g in Upstream.GOT if "/chat/completions" in g["path"]][-1])
+check(not any("钻研目标" in m["content"] for m in body["messages"] if m["role"] == "system"), "无目标的空间不注入")
+reset_settings()
+
+section("03 空间：删除=软删，不孤立数据，可恢复")
+r = client.delete("/api/spaces/" + SP)
+check(r.status_code == 200, "删空间 200")
+check(SP not in [x["id"] for x in client.get("/api/spaces").json()["spaces"]], "删后不在列表")
+check(client.get("/api/nodes/%s/messages" % t1).status_code == 200, "删后树仍可读")
+r = client.post("/api/spaces/%s/restore" % SP)
+sp = [x for x in client.get("/api/spaces").json()["spaces"] if x["id"] == SP]
+check(r.status_code == 200 and sp and sp[0]["trees"] == 2 and sp[0]["sources"] == 2 and sp[0]["notes"] == 1,
+      "test_delete_space_is_soft_and_restorable（恢复后计数不变）")
+check(client.delete("/api/spaces/" + dflt).status_code == 400, "默认空间不可删")
+check(client.delete("/api/projects/prj_nope").status_code == 404, "旧别名删不存在 404")
+
+
+# ════════════════════════════════════════════════════════════════════
 print("\n共 %d 例，失败 %d" % (N[0], len(FAILS)))
 for f in FAILS:
     print("  FAIL", f)

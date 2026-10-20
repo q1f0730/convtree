@@ -123,6 +123,12 @@ def build_context(node_id, query=None, with_cites=False):
                     out.insert(0, {"role": "system", "content": "\n".join(lines)})
         except Exception as exc:
             print("rag retrieve failed: %s" % exc)  # 检索失败不拦聊天，但留痕
+    if path:
+        space = store.get_project(path[0].get("project_id")) if path[0].get("project_id") else None
+        goal = (space or {}).get("goal") or ""
+        if goal:
+            out.insert(0, {"role": "system", "content": "【钻研目标】用户在空间「%s」里钻研：%s。回答时围绕这个目标组织重点。"
+                           % (space.get("name", ""), goal)})
     return (out, cites) if with_cites else out
 
 
@@ -135,6 +141,7 @@ class ChatIn(BaseModel):
     nodeId: str | None = None
     title: str | None = None
     projectId: str | None = None
+    spaceId: str | None = None
 
 
 class BranchIn(BaseModel):
@@ -170,6 +177,8 @@ class NoteIn(BaseModel):
     text: str
     fromNode: str | None = None
     fromName: str | None = None
+    spaceId: str | None = None
+    projectId: str | None = None
 
 
 class SettingsIn(BaseModel):
@@ -236,8 +245,8 @@ def test_settings():
 
 
 @app.get("/api/nodes")
-def nodes():
-    return {"nodes": store.list_nodes()}
+def nodes(space_id: str | None = None):
+    return {"nodes": store.list_nodes(space_id or None)}
 
 
 @app.get("/api/nodes/{node_id}/messages")
@@ -335,7 +344,10 @@ def node_overlays(node_id: str):
 @app.post("/api/notes")
 def post_note(body: NoteIn):
     try:
-        return store.add_note(body.text, body.fromNode, body.fromName or "")
+        return store.add_note(body.text, body.fromNode, body.fromName or "",
+                              project_id=body.spaceId or body.projectId or None)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
@@ -349,47 +361,88 @@ def delete_note(note_id: str):
 
 
 @app.get("/api/notes")
-def get_notes():
-    return {"notes": store.list_notes()}
+def get_notes(space_id: str | None = None):
+    return {"notes": store.list_notes(space_id or None)}
 
 
-class ProjectIn(BaseModel):
+class SpaceIn(BaseModel):
     name: str
+    goal: str | None = None
 
 
-class ProjectRenameIn(BaseModel):
-    name: str
+class SpacePatch(BaseModel):
+    name: str | None = None
+    goal: str | None = None
+
+
+def _space_err(exc):
+    return HTTPException(404 if isinstance(exc, LookupError) else 400, str(exc))
+
+
+# 空间（ADR-0003）。表名仍是 project；/api/projects* 为兼容别名，行为相同。
+@app.get("/api/spaces")
+def list_spaces_ep():
+    return {"spaces": store.list_projects(with_counts=True)}
+
+
+@app.post("/api/spaces")
+def create_space_ep(body: SpaceIn):
+    try:
+        return store.create_project(body.name, body.goal or "")
+    except ValueError as exc:
+        raise _space_err(exc)
+
+
+@app.get("/api/spaces/{space_id}")
+def get_space_ep(space_id: str):
+    sp = next((x for x in store.list_projects(with_counts=True) if x["id"] == space_id), None)
+    if not sp:
+        raise HTTPException(404, "空间不存在")
+    return sp
+
+
+@app.put("/api/spaces/{space_id}")
+def update_space_ep(space_id: str, body: SpacePatch):
+    try:
+        return store.update_project(space_id, name=body.name, goal=body.goal)
+    except (LookupError, ValueError) as exc:
+        raise _space_err(exc)
+
+
+@app.delete("/api/spaces/{space_id}")
+def delete_space_ep(space_id: str):
+    try:
+        return store.delete_project(space_id)
+    except (LookupError, ValueError) as exc:
+        raise _space_err(exc)
+
+
+@app.post("/api/spaces/{space_id}/restore")
+def restore_space_ep(space_id: str):
+    try:
+        return store.restore_project(space_id)
+    except (LookupError, ValueError) as exc:
+        raise _space_err(exc)
 
 
 @app.post("/api/projects")
-def create_project_ep(body: ProjectIn):
-    try:
-        return store.create_project(body.name)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
+def create_project_ep(body: SpaceIn):
+    return create_space_ep(body)
 
 
 @app.get("/api/projects")
 def list_projects_ep():
-    return {"projects": store.list_projects()}
+    return {"projects": store.list_projects(with_counts=True)}
 
 
 @app.put("/api/projects/{project_id}")
-def rename_project_ep(project_id: str, body: ProjectRenameIn):
-    try:
-        return store.rename_project(project_id, body.name)
-    except LookupError as exc:
-        raise HTTPException(404, str(exc))
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
+def rename_project_ep(project_id: str, body: SpacePatch):
+    return update_space_ep(project_id, body)
 
 
 @app.delete("/api/projects/{project_id}")
 def delete_project_ep(project_id: str):
-    try:
-        return store.delete_project(project_id)
-    except LookupError as exc:
-        raise HTTPException(404, str(exc))
+    return delete_space_ep(project_id)
 
 
 @app.post("/api/sources")
@@ -401,7 +454,7 @@ async def upload_source(project_id: str = Form(...), name: str = Form(""),
     from server import ingest, rag
     try:
         if not store.get_project(project_id):
-            raise LookupError("笔记本不存在")
+            raise LookupError("空间不存在")
         if file is not None and (file.filename or ""):
             raw = await file.read()
             ftype, content = ingest.extract_file(file.filename, raw)
@@ -476,9 +529,10 @@ async def chat(body: ChatIn):
             raise HTTPException(404, "节点不存在")
         node_id = body.nodeId
     else:
-        if body.projectId and not store.get_project(body.projectId):
-            raise HTTPException(404, "笔记本不存在")
-        node_id = store.create_node(None, body.title or "未命名", project_id=body.projectId or None)["id"]
+        space = body.spaceId or body.projectId or store.DEFAULT_SPACE_ID
+        if not store.get_project(space):
+            raise HTTPException(404, "空间不存在")
+        node_id = store.create_node(None, body.title or "未命名", project_id=space)["id"]
     store.add_message(node_id, "user", text)
 
     try:

@@ -523,7 +523,8 @@ check("Math.random" in nc and "filter" in nc, "荧光笔真随机取色")
 check("used.add(n.color)" in INK and "nodesCache=d.nodes||[];seedUsed()" in INK, "重载播种已用色")
 check("FAKE" not in INK, "死示例文本已删")
 check("treeAutoShown" in INK and "hasBranch" in INK, "树分叉后才首次露出")
-check("const panels={chat:true,note:false,tree:false}" in INK, "初始树相暂不露")
+# 2026-10-20：panels 多了 space 键（空间总览），断言放宽为"初始 tree:false"，意图不变
+check(re.search(r"const panels=\{chat:true,note:false,tree:false[,}]", INK) is not None, "初始树相暂不露")
 check("#tree.nov" in INK, "无分叉时树面板整体隐藏")
 check('title="树"' in INK, "侧栏树图标title")
 
@@ -805,16 +806,17 @@ check(am2["cites"] and am2["cites"][0]["source_name"] == "咖啡笔记", "删资
 check(c.delete("/api/sources/src_nope").status_code == 404, "删不存在资料404")
 r = c.delete("/api/projects/" + pid)
 check(r.status_code == 200 and c.get("/api/sources?project_id=" + pid).json()["sources"] == [], "删笔记本级联资料")
-_con = _sq3.connect(DB)
-check(_con.execute("SELECT COUNT(*) FROM chunk WHERE project_id=?", (pid,)).fetchone()[0] == 0, "删笔记本清块")
-_con.close()
+# 2026-10-20 ADR-0003：删空间改为软删（审计 P2-2）。原断言"块被硬删"换成行为等价的"删后检索不到"，
+# 块本身保留以便恢复。
+check(rag_mod.retrieve(pid, "曼特宁 Calvin 黑洞") == [], "删笔记本清块（软删：删后检索为空）")
 check(c.get("/api/nodes/%s/messages" % nb_root).status_code == 200, "删笔记本后会话仍可读")
 check(c.delete("/api/projects/prj_nope").status_code == 404, "删不存在笔记本404")
 # D-101：新代码无改写原文
 check(not re.search(r"UPDATE\s+message\s+SET", STORE_SRC + MAIN_SRC + RAG_SRC + INGEST_SRC, re.I), "新代码无UPDATE message")
 check("citation" in STORE_SRC and "add_citations" in STORE_SRC, "引用独立表")
 # 前端（静态接线断言）
-check('id="projSel"' in INK and 'id="projNew"' in INK and "不使用笔记本" in INK, "前端笔记本选择器")
+# 2026-10-20：笔记本更名为空间（ADR-0003），不再有"不使用笔记本"的游离对话
+check('id="projSel"' in INK and 'id="projNew"' in INK and "空间" in INK, "前端空间选择器")
 check('id="srcBtn"' in INK and 'id="srcCount"' in INK, "资料入口带计数")
 check('id="srcUrl"' in INK and "fd.append('url'" in INK, "前端URL添加接线")
 check('accept=".txt,.md,.markdown,.pdf,.docx"' in INK, "文件类型限定")

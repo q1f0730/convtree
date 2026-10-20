@@ -124,7 +124,56 @@ def init_db():
         ocols = [r[1] for r in conn.execute("PRAGMA table_info(overlay)")]
         if ocols and "value" not in ocols:  # 老库迁移：style 格式值
             conn.execute("ALTER TABLE overlay ADD COLUMN value TEXT")
+        _migrate_spaces(conn)
         conn.commit()
+    finally:
+        conn.close()
+
+
+DEFAULT_SPACE_ID = "prj_000000000000"
+DEFAULT_SPACE_NAME = "默认空间"
+
+
+def _migrate_spaces(conn):
+    """空间（ADR-0003）：project 加 goal / deleted_at，note 加 project_id；
+    NULL 归属的根节点与笔记收进"默认空间"。幂等：默认空间 id 固定，UPDATE 只碰 NULL 行。"""
+    pcols = [r[1] for r in conn.execute("PRAGMA table_info(project)")]
+    if "goal" not in pcols:
+        conn.execute("ALTER TABLE project ADD COLUMN goal TEXT NOT NULL DEFAULT ''")
+    if "deleted_at" not in pcols:
+        conn.execute("ALTER TABLE project ADD COLUMN deleted_at INTEGER")
+    ncols = [r[1] for r in conn.execute("PRAGMA table_info(note)")]
+    if "project_id" not in ncols:
+        conn.execute("ALTER TABLE note ADD COLUMN project_id TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_note_project ON note(project_id)")
+    if not conn.execute("SELECT 1 FROM project WHERE id=?", (DEFAULT_SPACE_ID,)).fetchone():
+        conn.execute("INSERT INTO project(id,name,created_at,goal) VALUES(?,?,?,'')",
+                     (DEFAULT_SPACE_ID, DEFAULT_SPACE_NAME, 0))
+    conn.execute("UPDATE node SET project_id=? WHERE parent_id IS NULL AND project_id IS NULL",
+                 (DEFAULT_SPACE_ID,))
+    for nid, from_node in conn.execute(
+            "SELECT id, from_node FROM note WHERE project_id IS NULL").fetchall():
+        conn.execute("UPDATE note SET project_id=? WHERE id=?",
+                     (_root_space(conn, from_node) or DEFAULT_SPACE_ID, nid))
+
+
+def _root_space(conn, node_id):
+    """节点所在树的空间（沿 parent 链到根）。不存在返回 None。"""
+    cur, seen, pid = node_id, set(), None
+    while cur and cur not in seen:
+        seen.add(cur)
+        row = conn.execute("SELECT parent_id, project_id FROM node WHERE id=?", (cur,)).fetchone()
+        if not row:
+            return None
+        pid = row[1]
+        cur = row[0]
+    return pid
+
+
+def space_of_node(node_id):
+    conn = connect()
+    try:
+        return _root_space(conn, node_id)
     finally:
         conn.close()
 
@@ -153,13 +202,32 @@ def create_node(parent_id, title, anchor_text=None, color=None, project_id=None)
             "anchor_text": anchor_text, "color": color, "project_id": project_id}
 
 
-def list_nodes():
+def list_nodes(project_id=None):
+    """全部未删节点；给 project_id 时只要根在该空间的树（含分支）。"""
     conn = connect()
     try:
-        return [dict(r) for r in conn.execute(
+        rows = [dict(r) for r in conn.execute(
             "SELECT * FROM node WHERE deleted=0 ORDER BY created_at")]
     finally:
         conn.close()
+    if not project_id:
+        return rows
+    by_id = {r["id"]: r for r in rows}
+    memo = {}
+
+    def root_pid(n):
+        chain = []
+        while n is not None and n["id"] not in memo:
+            chain.append(n["id"])
+            if not n["parent_id"]:
+                memo[n["id"]] = n["project_id"]
+                break
+            n = by_id.get(n["parent_id"])
+        val = memo.get(n["id"]) if n is not None else None
+        for i in chain:
+            memo[i] = val
+        return val
+    return [r for r in rows if root_pid(r) == project_id]
 
 
 def node_path(node_id):
@@ -320,19 +388,26 @@ def list_overlays(node_id):
         conn.close()
 
 
-def add_note(text, from_node=None, from_name=""):
+def add_note(text, from_node=None, from_name="", project_id=None):
+    """笔记属于空间：显式 project_id > 来源节点所在树的空间 > 默认空间。"""
     if not (text or "").strip():
         raise ValueError("内容为空")
     nid, ts = uid("note"), now_ms()
     conn = connect()
     try:
-        conn.execute("INSERT INTO note(id,text,from_node,from_name,created_at) VALUES(?,?,?,?,?)",
-                     (nid, text.strip(), from_node, from_name or "", ts))
+        if project_id:
+            if not conn.execute("SELECT 1 FROM project WHERE id=? AND deleted_at IS NULL",
+                                (project_id,)).fetchone():
+                raise LookupError("空间不存在")
+        else:
+            project_id = (_root_space(conn, from_node) if from_node else None) or DEFAULT_SPACE_ID
+        conn.execute("INSERT INTO note(id,text,from_node,from_name,created_at,project_id) VALUES(?,?,?,?,?,?)",
+                     (nid, text.strip(), from_node, from_name or "", ts, project_id))
         conn.commit()
     finally:
         conn.close()
     return {"id": nid, "text": text.strip(), "from_node": from_node,
-            "from_name": from_name or "", "created_at": ts}
+            "from_name": from_name or "", "created_at": ts, "project_id": project_id}
 
 
 def delete_note(note_id):
@@ -347,9 +422,12 @@ def delete_note(note_id):
     return {"id": note_id}
 
 
-def list_notes():
+def list_notes(project_id=None):
     conn = connect()
     try:
+        if project_id:
+            return [dict(r) for r in conn.execute(
+                "SELECT * FROM note WHERE project_id=? ORDER BY created_at DESC", (project_id,))]
         return [dict(r) for r in conn.execute("SELECT * FROM note ORDER BY created_at DESC")]
     finally:
         conn.close()
@@ -376,56 +454,100 @@ def delete_subtree(node_id):
     return ids
 
 
-def create_project(name):
+def _space_row(conn, project_id, include_deleted=False):
+    q = "SELECT * FROM project WHERE id=?" + ("" if include_deleted else " AND deleted_at IS NULL")
+    r = conn.execute(q, (project_id,)).fetchone()
+    return dict(r) if r else None
+
+
+def create_project(name, goal=""):
     if not (name or "").strip():
         raise ValueError("名称为空")
+    goal = (goal or "").strip()
+    if len(goal) > 200:
+        raise ValueError("钻研目标过长（≤200 字）")
     pid, ts = uid("prj"), now_ms()
     conn = connect()
     try:
-        conn.execute("INSERT INTO project(id,name,created_at) VALUES(?,?,?)",
-                     (pid, name.strip(), ts))
+        conn.execute("INSERT INTO project(id,name,created_at,goal) VALUES(?,?,?,?)",
+                     (pid, name.strip(), ts, goal))
         conn.commit()
     finally:
         conn.close()
-    return {"id": pid, "name": name.strip(), "created_at": ts}
+    return {"id": pid, "name": name.strip(), "goal": goal, "created_at": ts}
 
 
-def list_projects():
+def list_projects(with_counts=False):
+    """未删空间（默认空间排最前）。with_counts：trees=根节点数（未删）、sources、notes。"""
     conn = connect()
     try:
-        return [dict(r) for r in conn.execute(
-            "SELECT * FROM project ORDER BY created_at")]
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id,name,goal,created_at FROM project WHERE deleted_at IS NULL"
+            " ORDER BY (id=?) DESC, created_at", (DEFAULT_SPACE_ID,))]
+        if with_counts:
+            for r in rows:
+                r["trees"] = conn.execute(
+                    "SELECT COUNT(*) FROM node WHERE parent_id IS NULL AND deleted=0 AND project_id=?",
+                    (r["id"],)).fetchone()[0]
+                r["sources"] = conn.execute(
+                    "SELECT COUNT(*) FROM source WHERE project_id=?", (r["id"],)).fetchone()[0]
+                r["notes"] = conn.execute(
+                    "SELECT COUNT(*) FROM note WHERE project_id=?", (r["id"],)).fetchone()[0]
+                r["is_default"] = r["id"] == DEFAULT_SPACE_ID
+        return rows
     finally:
         conn.close()
+
+
+def update_project(project_id, name=None, goal=None):
+    if name is not None and not name.strip():
+        raise ValueError("名称为空")
+    if goal is not None and len(goal.strip()) > 200:
+        raise ValueError("钻研目标过长（≤200 字）")
+    conn = connect()
+    try:
+        if not _space_row(conn, project_id):
+            raise LookupError("空间不存在")
+        if name is not None:
+            conn.execute("UPDATE project SET name=? WHERE id=?", (name.strip(), project_id))
+        if goal is not None:
+            conn.execute("UPDATE project SET goal=? WHERE id=?", (goal.strip(), project_id))
+        conn.commit()
+        r = _space_row(conn, project_id)
+    finally:
+        conn.close()
+    return {"id": r["id"], "name": r["name"], "goal": r["goal"], "created_at": r["created_at"]}
 
 
 def rename_project(project_id, name):
-    if not (name or "").strip():
-        raise ValueError("名称为空")
-    conn = connect()
-    try:
-        cur = conn.execute("UPDATE project SET name=? WHERE id=?", (name.strip(), project_id))
-        conn.commit()
-        if cur.rowcount == 0:
-            raise LookupError("项目不存在")
-    finally:
-        conn.close()
-    return {"id": project_id, "name": name.strip()}
+    return update_project(project_id, name=name)
 
 
 def delete_project(project_id):
+    """软删空间（ADR-0003，修审计 P2-2）：只打 deleted_at，树/资料/块/笔记原样保留，可 restore。"""
+    if project_id == DEFAULT_SPACE_ID:
+        raise ValueError("默认空间不能删除")
     conn = connect()
     try:
-        if not conn.execute("SELECT 1 FROM project WHERE id=?", (project_id,)).fetchone():
-            raise LookupError("项目不存在")
-        conn.execute("DELETE FROM chunk WHERE project_id=?", (project_id,))
-        conn.execute("DELETE FROM source WHERE project_id=?", (project_id,))
-        conn.execute("UPDATE node SET project_id=NULL WHERE project_id=?", (project_id,))
-        conn.execute("DELETE FROM project WHERE id=?", (project_id,))
+        if not _space_row(conn, project_id):
+            raise LookupError("空间不存在")
+        conn.execute("UPDATE project SET deleted_at=? WHERE id=?", (now_ms(), project_id))
         conn.commit()
     finally:
         conn.close()
-    return {"id": project_id}
+    return {"id": project_id, "deleted": True}
+
+
+def restore_project(project_id):
+    conn = connect()
+    try:
+        if not _space_row(conn, project_id, include_deleted=True):
+            raise LookupError("空间不存在")
+        conn.execute("UPDATE project SET deleted_at=NULL WHERE id=?", (project_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"id": project_id, "deleted": False}
 
 
 def add_source(project_id, name, content, type="text", size=0):
@@ -435,8 +557,8 @@ def add_source(project_id, name, content, type="text", size=0):
         raise ValueError("内容为空")
     conn = connect()
     try:
-        if not conn.execute("SELECT 1 FROM project WHERE id=?", (project_id,)).fetchone():
-            raise LookupError("项目不存在")
+        if not _space_row(conn, project_id):
+            raise LookupError("空间不存在")
         sid, ts = uid("src"), now_ms()
         conn.execute("INSERT INTO source(id,project_id,name,content,type,size,created_at) VALUES(?,?,?,?,?,?,?)",
                      (sid, project_id, name.strip(), content, type, size, ts))
@@ -453,7 +575,8 @@ def list_sources(project_id):
         return [dict(r) for r in conn.execute(
             "SELECT s.id,s.project_id,s.name,s.type,s.size,s.created_at,"
             " (SELECT COUNT(*) FROM chunk c WHERE c.source_id=s.id) AS chunks"
-            " FROM source s WHERE s.project_id=? ORDER BY s.created_at",
+            " FROM source s WHERE s.project_id=? AND EXISTS(SELECT 1 FROM project p"
+            " WHERE p.id=s.project_id AND p.deleted_at IS NULL) ORDER BY s.created_at",
             (project_id,))]
     finally:
         conn.close()
@@ -486,10 +609,10 @@ def set_node_project(node_id, project_id):
 
 
 def get_project(project_id):
+    """未删空间；已软删视为不存在。"""
     conn = connect()
     try:
-        r = conn.execute("SELECT * FROM project WHERE id=?", (project_id,)).fetchone()
-        return dict(r) if r else None
+        return _space_row(conn, project_id)
     finally:
         conn.close()
 

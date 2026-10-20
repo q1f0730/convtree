@@ -208,10 +208,40 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 #composer #send2{height:40px;padding:0 18px}
 
 /* 笔记 */
+#spaces{flex:1;overflow-y:auto;padding:28px 32px;display:none;flex-direction:column;gap:18px;max-width:1040px;width:100%;margin:0 auto}
+#spaces .sphd{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+#spaces .sphd h2{margin:0;font-size:22px;font-weight:800;letter-spacing:.02em;color:var(--ink)}
+#spaces .sphd p{margin:4px 0 0;color:var(--mut);font-size:13px}
+#spaces .undo{border:0;background:var(--clay);box-shadow:var(--clay-sh);border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;color:var(--acc);cursor:pointer}
+#spgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:18px}
+.spcard{position:relative;display:flex;flex-direction:column;gap:10px;background:rgba(255,255,255,.86);border-radius:var(--r-card);padding:20px 22px 16px;box-shadow:var(--edge),0 16px 36px -14px rgba(28,34,48,.14),0 0 0 1px rgba(28,34,48,.03);animation:up .35s var(--ease);min-width:0;transition:transform .18s var(--ease),box-shadow .2s}
+.spcard:hover{transform:translateY(-2px);box-shadow:var(--edge),0 22px 44px -16px rgba(28,34,48,.18),0 0 0 1px rgba(58,109,240,.10)}
+.spcard.on{box-shadow:var(--edge),0 16px 36px -14px rgba(58,109,240,.30),0 0 0 2px rgba(58,109,240,.45)}
+.spcard h3{margin:0;font-size:16.5px;font-weight:800;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:44px}
+.spcard .badge{position:absolute;top:18px;right:18px;font-size:11px;font-weight:700;color:var(--acc);background:var(--acc-soft);border-radius:999px;padding:3px 9px}
+.spcard .goal{font-size:13.5px;line-height:1.7;color:var(--ink);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:23px;overflow-wrap:anywhere}
+.spcard .goal.none{color:var(--faint)}
+.spcard .goal b{color:var(--acc);font-weight:700;margin-right:4px}
+.spcard .stats{display:flex;gap:6px;flex-wrap:wrap}
+.spcard .stats span{font-size:12px;color:var(--mut);background:var(--bg);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.spcard .stats span i{font-style:normal;font-weight:800;color:var(--ink);margin-right:2px}
+.spcard .acts{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}
+.spcard button,.spnew button{border:0;background:var(--clay);box-shadow:var(--clay-sh);border-radius:999px;height:32px;padding:0 14px;font-size:12.5px;font-weight:600;color:var(--ink);cursor:pointer;transition:transform .15s var(--ease),color .2s}
+.spcard button:hover,.spnew button:hover{color:var(--acc);transform:translateY(-1px)}
+.spcard button.go,.spnew button.go{background:var(--pri-bg);color:#fff;box-shadow:var(--clay-pri-sh)}
+.spcard button.go:hover,.spnew button.go:hover{color:#fff}
+.spcard button.del{margin-left:auto;color:var(--mut)}
+.spcard button.del.armed{color:#fff;background:var(--danger)}
+.spcard input,.spnew input{width:100%;box-sizing:border-box;height:36px;border:0;border-radius:12px;background:var(--bg);padding:0 12px;font-size:13.5px;color:var(--ink);outline:none;font-family:inherit}
+.spcard input:focus,.spnew input:focus{box-shadow:var(--ring)}
+.spnew{display:flex;flex-direction:column;gap:10px;justify-content:center;border-radius:var(--r-card);padding:20px 22px;background:rgba(255,255,255,.45);box-shadow:inset 0 0 0 1.5px rgba(58,109,240,.22);min-height:150px}
+.spnew .t{font-size:14px;font-weight:800;color:var(--acc)}
+#projbar #spGoal{font-size:12.5px;color:var(--mut);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#projbar #spGoal b{color:var(--acc);font-weight:700;margin-right:4px}
 #notes{flex:1;overflow-y:auto;padding:28px;display:none;flex-direction:column;gap:18px;max-width:640px;width:100%;margin:0 auto}
 #notes .shuffle{align-self:flex-end;border:0;background:var(--clay);box-shadow:var(--clay-sh);border-radius:999px;padding:8px 16px;cursor:pointer;font-size:13px;font-weight:600;transition:transform .15s var(--ease),color .2s}
 #notes .shuffle:hover{color:var(--acc);transform:translateY(-1px)}
-#notes:not(:has(.ncard))::after{content:'笔记本还是空的 · 在回答里划词，点「记笔记」收进来';text-align:center;color:var(--mut);font-size:13px;padding:40px 0}
+#notes:not(:has(.ncard))::after{content:'这个空间还没有笔记 · 在回答里划词，点「记笔记」收进来';text-align:center;color:var(--mut);font-size:13px;padding:40px 0}
 .ncard{background:rgba(255,255,255,.86);border-radius:var(--r-card);padding:18px 22px;font-size:15px;line-height:1.9;box-shadow:var(--edge),0 16px 36px -14px rgba(28,34,48,.14),0 0 0 1px rgba(28,34,48,.03);animation:up .35s var(--ease)}
 .ncard hr{border:0;border-top:1px solid var(--line);margin:10px 0}
 .ncard hr:first-child{display:none}
@@ -330,6 +360,7 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 </style></head><body>
 <div id="side">
 <div class="brand" title="深挖"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5.5" r="2.2"/><circle cx="6.5" cy="18.5" r="2.2"/><circle cx="17.5" cy="18.5" r="2.2"/><path d="M12 7.7v4M12 11.7l-5 4.6M12 11.7l5 4.6"/></svg></i>深挖</div>
+<button data-m="space" title="空间总览"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></svg><span>空间</span></button>
 <button data-m="chat" class="on" title="聊天"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="11.5" rx="3"/><path d="M9 16v3.8L13.2 16"/></svg><span>聊天</span></button>
 <button data-m="note" title="笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4.5"/></svg><span>笔记</span></button>
 <button id="railSrc" title="资料"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M8 13h8"/></svg><span>资料</span></button>
@@ -343,12 +374,13 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="main">
 <div id="center">
 <div id="projbar">
-<div class="nb" title="选了笔记本后，新对话会基于其中的资料回答并标注来源"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h11a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h11M9 8.5h5"/></svg><span class="lb">笔记本</span>
-<select id="projSel" title="选了笔记本后，新对话会基于其中的资料回答并标注来源"><option value="">不使用笔记本</option></select></div>
-<button id="projNew" title="新建笔记本"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-<input id="projName" placeholder="笔记本名称，回车确认" style="display:none">
+<div class="nb" title="当前空间：对话、资料、笔记都归它；回答依据空间资料并标注来源"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h11a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h11M9 8.5h5"/></svg><span class="lb">空间</span>
+<select id="projSel" title="切换空间"></select></div>
+<button id="projNew" title="新建空间"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+<input id="projName" placeholder="空间名称，回车确认" style="display:none">
 <span class="vsep"></span>
-<button id="srcBtn" title="管理本笔记本的资料"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M10 12.5h5M10 16h5"/></svg>资料<span id="srcCount">0</span></button>
+<button id="srcBtn" title="管理本空间的资料"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M10 12.5h5M10 16h5"/></svg>资料<span id="srcCount">0</span></button>
+<span id="spGoal"></span>
 </div>
 <div id="tabs"></div>
 <div id="cv">
@@ -356,10 +388,11 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div id="backbar"><button id="backBtn">← 返回上一级</button><span class="vsep"></span><span id="crumb"></span></div>
 <div id="msgs"></div>
 <div id="empty"><div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5.5" r="2.2"/><circle cx="6.5" cy="18.5" r="2.2"/><circle cx="17.5" cy="18.5" r="2.2"/><path d="M12 7.7v4M12 11.7l-5 4.6M12 11.7l5 4.6"/></svg></div><h1>深 挖</h1><div class="sub">从一个难题开始 · 沿着分支想透</div><div id="boxrow"><input id="q" placeholder="比如：怎么选咖啡豆？"><button id="send">发送</button></div><div class="kbd-tip"><kbd id="kbdHint">Ctrl K</kbd> 随时回到提问框</div>
-<div class="howto"><div><i class="t-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/></svg></i>选中回答里的文字，分支深挖</div><div><i class="t-cite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h11a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h11"/></svg></i>挂上笔记本，回答带 [n] 出处</div><div><i class="t-tree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.5"/><rect x="3" y="16" width="6" height="5" rx="1.5"/><rect x="15" y="16" width="6" height="5" rx="1.5"/><path d="M12 8v4M6 16v-4h12v4"/></svg></i>分支树里看清思路全貌</div></div></div>
+<div class="howto"><div><i class="t-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/></svg></i>选中回答里的文字，分支深挖</div><div><i class="t-cite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h11a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2z"/><path d="M5 17.5a2 2 0 0 1 2-2h11"/></svg></i>空间里加资料，回答带 [n] 出处</div><div><i class="t-tree"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.5"/><rect x="3" y="16" width="6" height="5" rx="1.5"/><rect x="15" y="16" width="6" height="5" rx="1.5"/><path d="M12 8v4M6 16v-4h12v4"/></svg></i>分支树里看清思路全貌</div></div></div>
 <div id="composer" style="display:none"><input id="q2" placeholder="继续问…  选中上方文字可开分支"><button id="send2">发送</button></div>
 </div>
 <div id="notes"></div>
+<div id="spaces"><div class="sphd"><div><h2>空间</h2><p>一个空间钻研一个课题 · 对话树、资料、笔记各归其位</p></div><button class="undo" id="spUndo" style="display:none"></button></div><div id="spgrid"></div></div>
 </div><div id="batchbar"></div></div>
 <div id="tree"><div class="hd"><div class="hd1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="5" rx="1.5"/><rect x="3" y="16" width="6" height="5" rx="1.5"/><rect x="15" y="16" width="6" height="5" rx="1.5"/><path d="M12 8v4M6 16v-4h12v4"/></svg><b>分支树</b><span id="treeScope"></span><button id="treeFold" title="收起"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button></div><div class="hd2"><span id="treeTog"><button data-v="graph" class="on">导图</button><button data-v="list">大纲</button></span><span id="treeZoom"><button data-z="out" title="缩小">−</button><button data-z="reset" title="复位">100%</button><button data-z="in" title="放大">＋</button></span></div></div><div id="treeUnfoldWrap"><button id="treeUnfold" title="展开对话树"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button></div><div id="treeList"></div><div id="treeScroll"><svg id="treeGraph" style="display:none"></svg></div>
 <div id="treeResize" title="拖动调整树栏宽度（双击复位）"></div></div></div>
@@ -450,7 +483,7 @@ const POOL=['#f25555','#3fa7ff','#41c46b','#b678f0','#f5a623','#e06ba8','#22c3b6
 const ULC=['#f5d90a','#7fd67f','#7fb3f5','#f5a0c0','#c0a0f5','#f5a05a','#5ad6d6','#c9c9c9'];
 const used=new Set();
 const tabs=[];let cur=null,tabSeq=0,nodesCache=[];
-let curProject=null,projects=[],sources=[];
+const DEFAULT_SPACE='prj_000000000000';let curProject=(function(){try{return localStorage.getItem('ct.space')||DEFAULT_SPACE}catch(_){return DEFAULT_SPACE}})(),projects=[],sources=[],lastDeletedSpace=null;
 const notes=[];
 let treeAutoShown=false;
 function hasBranch(){return nodesCache.some(n=>n.parent_id)}
@@ -599,11 +632,11 @@ function curRootId(){if(!cur||!cur.nodeId)return null;const byId={};nodesCache.f
  let id=cur.nodeId,guard=0;while(byId[id]&&byId[id].parent_id&&guard++<50)id=byId[id].parent_id;return id}
 function renderRoots(all){const R=document.getElementById('roots');const st=R.scrollTop;R.innerHTML='';
  const rid=curRootId();
- (all||[]).filter(n=>!n.parent_id).forEach(n=>{
+ (all||[]).filter(n=>!n.parent_id&&n.project_id===curProject).forEach(n=>{
   const d=document.createElement('div');d.className='ritem'+(n.id===rid?' on':'');
   d.title=n.title;
   const t=document.createElement('div');t.textContent=n.title;d.appendChild(t);
-  const s=document.createElement('small');s.textContent=fmtTime(n.created_at)+(n.project_id&&projName(n.project_id)?' · '+projName(n.project_id):'');d.appendChild(s);
+  const s=document.createElement('small');s.textContent=fmtTime(n.created_at);d.appendChild(s);
   d.onclick=()=>{
    const op=tabs.find(t=>t.nodeId===n.id);
    if(op){switchTab(op);return}
@@ -773,22 +806,51 @@ async function send(text){text=(text||'').trim();if(!text)return;
  if(first&&t0.nodeId){t0.name=text.length>12?text.slice(0,12)+'…':text;renderTabs();
   fetch('/api/nodes/'+t0.nodeId+'/suggest-title',{method:'POST'}).then(r=>r.json()).then(d=>{
    if(d&&d.title&&!t0.userNamed){t0.name=d.title;renderTabs();renderTree();refreshRoots()}}).catch(()=>{})}send.busy=false;setSendLock(false)}
-async function loadProjects(){try{const d=await (await fetch('/api/projects')).json();projects=d.projects||[];if(curProject&&!projects.some(p=>p.id===curProject))curProject=null;renderProjSel();refreshSrcCount();renderRoots(nodesCache)}catch(_){}}
+async function loadProjects(){try{const d=await (await fetch('/api/spaces')).json();projects=d.spaces||[];if(!projects.some(p=>p.id===curProject))curProject=(projects[0]||{}).id||DEFAULT_SPACE;renderProjSel();refreshSrcCount();renderRoots(nodesCache);if(panels.space)paintSpaces()}catch(_){}}
 function projName(id){const p=projects.find(x=>x.id===id);return p?p.name:''}
-function renderProjSel(){const s=document.getElementById('projSel');s.innerHTML='<option value="">不使用笔记本</option>';projects.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;s.appendChild(o)});
- s.value=curProject||'';renderEmptyHint()}
+function renderProjSel(){const s=document.getElementById('projSel');s.innerHTML='';projects.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;s.appendChild(o)});
+ s.value=curProject||'';const g=document.getElementById('spGoal'),sp=projects.find(x=>x.id===curProject);g.innerHTML='';
+ if(sp&&sp.goal){const b=document.createElement('b');b.textContent='目标';g.appendChild(b);g.appendChild(document.createTextNode(sp.goal));g.title='钻研目标：'+sp.goal}else g.title='';renderEmptyHint()}
 function renderEmptyHint(){const sub=document.querySelector('#empty .sub');if(!sub)return;
- sub.textContent=curProject?('在「'+projName(curProject)+'」里提问 · 回答会标注资料来源'):'从一个难题开始 · 沿着分支想透'}
-function setProject(id){curProject=id||null;renderProjSel();refreshSrcCount();if(document.getElementById('srcPanel').style.display==='block')renderSources()}
+ const sp=projects.find(x=>x.id===curProject);sub.textContent=sp?(sp.goal?('「'+sp.name+'」· '+sp.goal):('在「'+sp.name+'」里提问 · 沿着分支想透')):'从一个难题开始 · 沿着分支想透'}
+function setProject(id){curProject=id||DEFAULT_SPACE;try{localStorage.setItem('ct.space',curProject)}catch(_){}renderProjSel();refreshSrcCount();renderRoots(nodesCache);if(panels.note)renderNotes();if(document.getElementById('srcPanel').style.display==='block')renderSources()}
+function enterSpace(id){if(id!==curProject||(cur&&curRootId()&&(nodesCache.find(x=>x.id===curRootId())||{}).project_id!==id)){tabs.length=0;cur=null;selNodes.clear();syncBatchbar();renderTabs();renderMsgs();renderTree()}
+ setProject(id);setModule('chat')}
+async function paintSpaces(){const G=document.getElementById('spgrid');G.innerHTML='';
+ const u=document.getElementById('spUndo');if(lastDeletedSpace){u.style.display='';u.textContent='撤销删除「'+lastDeletedSpace.name+'」';u.onclick=async()=>{try{const r=await fetch('/api/spaces/'+lastDeletedSpace.id+'/restore',{method:'POST'});if(!r.ok)throw 0;toast('已恢复「'+lastDeletedSpace.name+'」');lastDeletedSpace=null;await loadProjects();paintSpaces()}catch(_){toast('恢复失败')}}}else u.style.display='none';
+ projects.forEach(p=>{const c=document.createElement('div');c.className='spcard'+(p.id===curProject?' on':'');c.dataset.sid=p.id;
+  const h=document.createElement('h3');h.textContent=p.name;h.title=p.name;c.appendChild(h);
+  if(p.id===curProject){const b=document.createElement('span');b.className='badge';b.textContent='当前';c.appendChild(b)}
+  const g=document.createElement('div');g.className='goal'+(p.goal?'':' none');if(p.goal){const b=document.createElement('b');b.textContent='目标';g.appendChild(b);g.appendChild(document.createTextNode(p.goal))}else g.textContent='还没写钻研目标 · 点「编辑」写一句';c.appendChild(g);
+  const st=document.createElement('div');st.className='stats';[[p.trees,'棵树'],[p.sources,'份资料'],[p.notes,'条笔记']].forEach(([n,l])=>{const sp=document.createElement('span');const i=document.createElement('i');i.textContent=String(n||0);sp.appendChild(i);sp.appendChild(document.createTextNode(l));st.appendChild(sp)});c.appendChild(st);
+  const a=document.createElement('div');a.className='acts';
+  const go=document.createElement('button');go.className='go';go.textContent=p.id===curProject?'继续钻研':'进入';go.onclick=()=>enterSpace(p.id);a.appendChild(go);
+  const ed=document.createElement('button');ed.textContent='编辑';ed.onclick=()=>editSpaceCard(c,p);a.appendChild(ed);
+  if(!p.is_default){const del=document.createElement('button');del.className='del';del.textContent='删除';del.title='软删除：树、资料、笔记都保留，可撤销';
+   del.onclick=async()=>{if(!del.dataset.armed){del.dataset.armed='1';del.classList.add('armed');del.textContent='确认删除？';setTimeout(()=>{del.dataset.armed='';del.classList.remove('armed');del.textContent='删除'},3000);return}
+    try{const r=await fetch('/api/spaces/'+p.id,{method:'DELETE'});if(!r.ok)throw 0;lastDeletedSpace={id:p.id,name:p.name};if(curProject===p.id)enterSpaceSilently(DEFAULT_SPACE);toast('已删除「'+p.name+'」· 内容都保留，可撤销');await loadProjects();paintSpaces()}catch(_){toast('删除失败')}};a.appendChild(del)}
+  c.appendChild(a);G.appendChild(c)});
+ const n=document.createElement('div');n.className='spnew';const t=document.createElement('div');t.className='t';t.textContent='＋ 新建空间';n.appendChild(t);
+ const i1=document.createElement('input');i1.id='spNewName';i1.placeholder='空间名称，如：软件工程期末';i1.maxLength=60;n.appendChild(i1);
+ const i2=document.createElement('input');i2.id='spNewGoal';i2.placeholder='钻研目标（可选）：一句话说清想弄懂什么';i2.maxLength=200;n.appendChild(i2);
+ const b=document.createElement('button');b.className='go';b.id='spCreate';b.textContent='创建并进入';b.onclick=()=>createProject(i1.value,i2.value);n.appendChild(b);
+ [i1,i2].forEach(x=>x.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)createProject(i1.value,i2.value)});G.appendChild(n)}
+function enterSpaceSilently(id){tabs.length=0;cur=null;renderTabs();renderMsgs();renderTree();setProject(id)}
+function editSpaceCard(c,p){c.innerHTML='';const h=document.createElement('div');h.style.cssText='font-size:13px;font-weight:700;color:var(--acc)';h.textContent='编辑空间';c.appendChild(h);
+ const i1=document.createElement('input');i1.value=p.name;i1.maxLength=60;i1.placeholder='空间名称';c.appendChild(i1);
+ const i2=document.createElement('input');i2.value=p.goal||'';i2.maxLength=200;i2.placeholder='钻研目标（可选）';c.appendChild(i2);
+ const a=document.createElement('div');a.className='acts';const ok=document.createElement('button');ok.className='go';ok.textContent='保存';
+ ok.onclick=async()=>{if(!i1.value.trim()){toast('名称不能为空');return}try{const r=await fetch('/api/spaces/'+p.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:i1.value.trim(),goal:i2.value.trim()})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'');toast('已保存');await loadProjects();paintSpaces()}catch(e){toast('保存失败 '+e.message)}};
+ const no=document.createElement('button');no.textContent='取消';no.onclick=()=>paintSpaces();a.appendChild(ok);a.appendChild(no);c.appendChild(a);i2.focus()}
 async function refreshSrcCount(){const el=document.getElementById('srcCount');if(!curProject){el.textContent='0';return}
  try{const d=await (await fetch('/api/sources?project_id='+curProject)).json();sources=d.sources||[];el.textContent=String(sources.length)}catch(_){}}
-async function createProject(n){if(!n||!n.trim())return;try{const r=await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n.trim()})});const d=await r.json();if(r.ok){curProject=d.id;await loadProjects();toast('已建笔记本，添加资料吧');openSrcPanel()}else toast(d.detail||'建笔记本失败')}catch(e){toast('建笔记本失败')}}
+async function createProject(n,goal){if(!n||!n.trim()){toast('先写空间名称');return}try{const r=await fetch('/api/spaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n.trim(),goal:(goal||'').trim()})});const d=await r.json();if(r.ok){await loadProjects();enterSpace(d.id);toast('已建空间，添加资料吧');openSrcPanel()}else toast(d.detail||'建空间失败')}catch(e){toast('建空间失败')}}
 function openSrcPanel(){document.getElementById('srcPanel').style.display='block';renderSources()}
 function closeSrcPanel(){document.getElementById('srcPanel').style.display='none'}
 const SRC_TY={txt:'TXT',md:'MD',pdf:'PDF',docx:'DOCX',url:'网页',text:'粘贴'};
 async function renderSources(){const L=document.getElementById('srcList');L.innerHTML='';
  document.getElementById('srcTitle').textContent=curProject?('「'+projName(curProject)+'」的资料'):'添加资料';
- if(!curProject){L.innerHTML='<div style="color:var(--mut);font-size:12px">先在顶部选一个笔记本（或点 ＋ 新建）</div>';return}
+ if(!curProject){L.innerHTML='<div style="color:var(--mut);font-size:12px">先在顶部选一个空间（或点 ＋ 新建）</div>';return}
  try{const d=await (await fetch('/api/sources?project_id='+curProject)).json();sources=d.sources||[];document.getElementById('srcCount').textContent=String(sources.length);
   if(!sources.length){L.innerHTML='<div class="empty">暂无资料 · 上面选文件、贴链接或粘贴文本</div>';return}
   sources.forEach(s=>{const it=document.createElement('div');it.className='srcitem';
@@ -802,11 +864,11 @@ async function postSource(fd,okMsg){if(postSource.busy)return false;postSource.b
   if(r.ok){renderSources();toast(okMsg+'（'+(d.chunks||0)+' 块）');return true}
   toast(typeof d.detail==='string'?d.detail:'添加失败');return false}
  catch(e){toast('添加失败');return false}finally{postSource.busy=false}}
-async function uploadSource(){const f=document.getElementById('srcFile').files[0];const t=document.getElementById('srcText').value;if(!curProject){toast('先选笔记本');return}
+async function uploadSource(){const f=document.getElementById('srcFile').files[0];const t=document.getElementById('srcText').value;if(!curProject){toast('先选空间');return}
  const fd=new FormData();fd.append('project_id',curProject);
  if(f){if(t.trim())toast('将只添加文件');fd.append('file',f)}else if(t.trim())fd.append('text',t);else{toast('选文件、贴链接或粘贴文本');return}
  if(await postSource(fd,'已添加')){document.getElementById('srcFile').value='';document.getElementById('srcFileName').textContent='';if(!f)document.getElementById('srcText').value=''}}
-async function addUrlSource(){const u=document.getElementById('srcUrl').value.trim();if(!curProject){toast('先选笔记本');return}if(!u){toast('先粘贴链接');return}
+async function addUrlSource(){const u=document.getElementById('srcUrl').value.trim();if(!curProject){toast('先选空间');return}if(!u){toast('先粘贴链接');return}
  const fd=new FormData();fd.append('project_id',curProject);fd.append('url',u);
  if(await postSource(fd,'已抓取'))document.getElementById('srcUrl').value=''}
 function hideCitePop(){document.getElementById('citePop').style.display='none'}
@@ -819,7 +881,7 @@ function showCitePop(chip){const b=chip.closest('.msg-a');const list=(b&&b._cite
  P.style.display='block';const r=chip.getBoundingClientRect();const w=P.offsetWidth,h=P.offsetHeight;
  let x=Math.min(Math.max(8,r.left-20),innerWidth-w-8),y=r.bottom+6;if(y+h>innerHeight-8)y=Math.max(8,r.top-h-6);P.style.left=x+'px';P.style.top=y+'px'}
 function syncProjectFromCur(){const rid=curRootId();if(!rid)return;const n=nodesCache.find(x=>x.id===rid);if(!n)return;const pid=n.project_id||null;if(pid!==curProject)setProject(pid)}
-document.getElementById('projSel').onchange=e=>{const v=e.target.value||null;if(cur&&cur.nodeId&&cur.msgs&&cur.msgs.length){tabs.length=0;cur=null;renderTabs();renderMsgs();renderTree();refreshRoots()}setProject(v)};
+document.getElementById('projSel').onchange=e=>{const v=e.target.value||DEFAULT_SPACE;tabs.length=0;cur=null;renderTabs();renderMsgs();renderTree();setProject(v);if(panels.space)paintSpaces()};
 document.getElementById('projNew').onclick=()=>{const i=document.getElementById('projName');i.style.display='block';i.value='';i.focus();i.onblur=()=>{i.style.display='none'};i.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){const n=i.value;i.style.display='none';if(n&&n.trim())createProject(n.trim())}else if(e.key==='Escape'){i.style.display='none'}}};
 document.getElementById('srcBtn').onclick=openSrcPanel;
 document.getElementById('srcClose').onclick=closeSrcPanel;
@@ -901,7 +963,7 @@ async function textAct(act,info){
  const txt=info.text;
  if(act==='copy'){if(!navigator.clipboard){toast('当前环境不支持复制')}else{navigator.clipboard.writeText(txt).then(()=>toast('已复制'),()=>toast('复制失败，请手动复制'))}}
  else if(act==='ul'){await applyUl(ULC[0],info)}
- else if(act==='note'){addNote(txt);toast('已记入笔记本')}
+ else if(act==='note'){addNote(txt);toast('已记入笔记')}
  else if(act==='fmt'){document.getElementById('menu').style.display='none';showFmtMenu()}
  else if(act==='fmtgo'){const bm0=bubbleMid(info.range);const m0=bm0&&bm0.mid&&findMsg(bm0.mid);
   if(!m0){toast('等本轮落库后再排版');return}
@@ -934,15 +996,15 @@ async function textAct(act,info){
   tabs.push(nt);switchTab(nt);refreshRoots();
   toast('已分支出去')}}
 
-async function loadNotes(){try{const d=await (await fetch('/api/notes')).json();notes.length=0;
+async function loadNotes(){try{const d=await (await fetch('/api/notes?space_id='+encodeURIComponent(curProject||DEFAULT_SPACE))).json();notes.length=0;
  (d.notes||[]).forEach(n=>notes.push({id:n.id,text:n.text,time:fmtTime(n.created_at),from:n.from_name||'?',nodeId:n.from_node||null}))}catch(_){}}
-async function addNote(txt){try{const r=await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt,fromNode:cur&&cur.nodeId?cur.nodeId:null,fromName:cur?cur.name:'?'})});
+async function addNote(txt){try{const r=await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt,fromNode:cur&&cur.nodeId?cur.nodeId:null,fromName:cur?cur.name:'?',spaceId:cur&&cur.nodeId?null:curProject})});
  if(!r.ok)throw new Error((await r.text()).slice(0,100));const n=await r.json();
  notes.unshift({id:n.id,text:n.text,time:fmtTime(n.created_at),from:n.from_name||'?',nodeId:n.from_node||null});paintNotes()}catch(e){toast('记笔记失败：'+e.message)}}
 function renderNotes(){paintNotes();loadNotes().then(paintNotes)}
 function paintNotes(){const N=document.getElementById('notes');const st=N.scrollTop;N.innerHTML='';
  const b=document.createElement('button');b.textContent='随便看看';b.className='shuffle';
- b.onclick=()=>{if(!notes.length){toast('笔记本还是空的');return}
+ b.onclick=()=>{if(!notes.length){toast('这个空间还没有笔记');return}
   const n=notes[Math.floor(Math.random()*notes.length)];Array.prototype.slice.call(N.querySelectorAll('.ncard')).forEach(function(c){if(c.dataset.nid===n.id)c.remove()});N.prepend(card(n));toast('随机回顾')};
  N.appendChild(b);
  notes.forEach(n=>N.appendChild(card(n)));N.scrollTop=st}
@@ -960,24 +1022,26 @@ function card(n){const d=document.createElement('div');d.className='ncard';d.dat
    const i=notes.findIndex(x=>x.id===n.id);if(i>=0)notes.splice(i,1);paintNotes();toast('已删除')}).catch(()=>toast('删除失败'))}
   else{del.dataset.armed='1';del.textContent='确认删除？';setTimeout(()=>{if(del.isConnected){delete del.dataset.armed;del.textContent='删除'}},2500)}};
  m.appendChild(document.createTextNode(' · '));m.appendChild(del);d.append(hr1,p,hr2,m);return d}
-const panels={chat:true,note:false,tree:false};
+const panels={chat:true,note:false,tree:false,space:false};
 function syncPanels(){document.querySelectorAll('#side button[data-m]').forEach(b=>b.classList.toggle('on',!!panels[b.dataset.m]));
  document.getElementById('chat').style.display=panels.chat?'flex':'none';
  document.getElementById('tabs').style.display=panels.chat?'flex':'none';
  document.getElementById('clist').style.display=panels.chat?'flex':'none';
  document.getElementById('notes').style.display=panels.note?'flex':'none';
+ document.getElementById('spaces').style.display=panels.space?'flex':'none';
  document.getElementById('tree').classList.toggle('open',panels.tree);
  document.getElementById('tree').classList.toggle('nov',!(panels.tree||treeAutoShown));syncTreeWidth();
- if(panels.note)renderNotes();if(panels.tree)renderTree()}
-function setModule(m){if(m==='chat'){panels.chat=true;panels.note=false;panels.tree=hasBranch()}else if(m==='tree'){panels.chat=true;panels.note=false;panels.tree=true}else if(m)panels[m]=true;syncPanels()}
+ if(panels.note)renderNotes();if(panels.space)loadProjects().then(paintSpaces);if(panels.tree)renderTree()}
+function setModule(m){if(m==='chat'){panels.chat=true;panels.note=false;panels.space=false;panels.tree=hasBranch()}else if(m==='tree'){panels.chat=true;panels.note=false;panels.space=false;panels.tree=true}else if(m==='space'){panels.chat=false;panels.note=false;panels.tree=false;panels.space=true}else if(m)panels[m]=true;syncPanels()}
 document.querySelectorAll('#side button').forEach(b=>b.onclick=(e)=>{
  if(!b.dataset.m)return;
  const m=b.dataset.m;
  if(e.ctrlKey||e.metaKey){panels[m]=!panels[m]; /* ctrl+点：叠加并开 */
   if(!Object.values(panels).some(Boolean))panels[m]=true}
- else if(m==='chat'){panels.chat=true;panels.note=false;panels.tree=hasBranch()} /* 有分叉才带树 */
- else if(m==='tree'){panels.chat=true;panels.note=false;panels.tree=true} /* 树图标：聊天+树 */
- else{panels.chat=false;panels.note=true;panels.tree=false} /* 笔记独占 */
+ else if(m==='chat'){panels.chat=true;panels.note=false;panels.space=false;panels.tree=hasBranch()} /* 有分叉才带树 */
+ else if(m==='tree'){panels.chat=true;panels.note=false;panels.space=false;panels.tree=true} /* 树图标：聊天+树 */
+ else if(m==='space'){panels.chat=false;panels.note=false;panels.tree=false;panels.space=true} /* 空间总览独占 */
+ else{panels.chat=false;panels.note=true;panels.space=false;panels.tree=false} /* 笔记独占 */
  syncPanels()});
 document.getElementById('railSrc').onclick=openSrcPanel;
 document.querySelectorAll('#treeTog button').forEach(b=>b.onclick=(e)=>{e.stopPropagation();treeMode=b.dataset.v;renderTree()});
@@ -1104,7 +1168,7 @@ function fillSettings(c){c=c||{};const v=(id,x)=>{document.getElementById(id).va
  try{const v=await (await fetch('/api/version')).json();const b=v.build||'dev';document.getElementById('buildTag').textContent='构建 '+b;console.log('[convtree] build '+b)}catch(_){}
  try{const n=await (await fetch('/api/nodes')).json();
   nodesCache=n.nodes||[];
-  const root=nodesCache.find(x=>!x.parent_id)||null;
+  await loadProjects();const root=nodesCache.find(x=>!x.parent_id&&x.project_id===curProject)||null;
   if(root){cur={id:++tabSeq,nodeId:root.id,name:root.title,parent:null,color:root.color,msgs:null};tabs.push(cur);renderTabs();switchTab(cur)}
   else{renderTabs();renderTree()}
   syncPanels();refreshRoots()}catch(_){}})();

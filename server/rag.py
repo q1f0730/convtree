@@ -206,8 +206,10 @@ def _vector_scores(chunks, query):
 
 
 def retrieve(project_id, query, top_k=None):
-    """按笔记本检索 top-k 块：[{chunk_id, source_id, source_name, text, start, end, score}]。"""
+    """按空间检索 top-k 块：[{chunk_id, source_id, source_name, text, start, end, score}]。已软删空间检索为空。"""
     top_k = top_k or TOP_K
+    if not store.get_project(project_id):
+        return []
     chunks = store.list_chunks(project_id)
     if not chunks or not (query or "").strip():
         return []
