@@ -16,6 +16,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, StrictInt
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -448,40 +449,48 @@ async def upload_source(project_id: str = Form(...), name: str = Form(""),
                         url: str = Form("")):
     """资料入库：file（txt/md/pdf/docx）| url（抓网页）| text（粘贴），三选一，优先级同序。
     入库即切块建索引（BM25，配了嵌入则顺带向量）；返回带 chunks 块数。"""
-    from server import ingest, rag
+    from server import ingest
+    raw, fname = None, ""
+    if file is not None and (file.filename or ""):
+        raw, fname = await file.read(), file.filename
     try:
-        if not store.get_project(project_id):
-            raise LookupError("空间不存在")
-        if file is not None and (file.filename or ""):
-            raw = await file.read()
-            ftype, content = ingest.extract_file(file.filename, raw)
-            name = (name or "").strip() or file.filename
-            size = len(raw)
-        elif (url or "").strip():
-            ftype, title, content = ingest.extract_url(url)
-            name = (name or "").strip() or title
-            size = len(content.encode("utf-8"))
-        else:
-            content = ingest.normalize(text)
-            ftype = "text"
-            name = (name or "").strip() or "粘贴文本"
-            size = len(content.encode("utf-8"))
-        if not content.strip():
-            raise ValueError("内容为空（没抽到文字）")
-        src = store.add_source(project_id, name, content, type=ftype, size=size)
-        try:
-            src["chunks"] = rag.index_source(src["id"], project_id, name, content)
-        except Exception as exc:
-            print("rag index failed: %s" % exc)  # 索引失败不拦上传，但留痕
-            src["chunks"] = 0
-        src.pop("content", None)
-        return src
+        # ADR-0005：抽取 + 入库 + 切块索引都是同步重活，放线程池，不卡事件循环（审计 P1-2）
+        return await run_in_threadpool(_ingest_sync, project_id, name, raw, fname, text, url)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
     except ingest.UnsupportedType as exc:
         raise HTTPException(415, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+def _ingest_sync(project_id, name, raw, fname, text, url):
+    from server import ingest, rag
+    if not store.get_project(project_id):
+        raise LookupError("空间不存在")
+    if raw is not None:
+        ftype, content = ingest.extract_file(fname, raw)
+        name = (name or "").strip() or fname
+        size = len(raw)
+    elif (url or "").strip():
+        ftype, title, content = ingest.extract_url(url)
+        name = (name or "").strip() or title
+        size = len(content.encode("utf-8"))
+    else:
+        content = ingest.normalize(text)
+        ftype = "text"
+        name = (name or "").strip() or "粘贴文本"
+        size = len(content.encode("utf-8"))
+    if not content.strip():
+        raise ValueError("内容为空（没抽到文字）")
+    src = store.add_source(project_id, name, content, type=ftype, size=size)
+    try:
+        src["chunks"] = rag.index_source(src["id"], project_id, name, content)
+    except Exception as exc:
+        print("rag index failed: %s" % exc)  # 索引失败不拦上传，但留痕
+        src["chunks"] = 0
+    src.pop("content", None)
+    return src
 
 
 @app.get("/api/sources")
@@ -533,7 +542,7 @@ async def chat(body: ChatIn):
     store.add_message(node_id, "user", text)
 
     try:
-        messages, cites = build_context(node_id, query=text, with_cites=True)
+        messages, cites = await run_in_threadpool(build_context, node_id, text, True)
     except Exception:
         store.add_message(node_id, "assistant", "（生成失败：服务内部错误）")
         raise

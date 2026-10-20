@@ -480,6 +480,53 @@ reset_settings()
 
 
 # ════════════════════════════════════════════════════════════════════
+section("05 重活不阻塞事件循环（审计 P1-2，真 uvicorn）")
+import socket  # noqa: E402
+import subprocess  # noqa: E402,F811
+import httpx  # noqa: E402
+_s = socket.socket()
+_s.bind(("127.0.0.1", 0))
+_port = _s.getsockname()[1]
+_s.close()
+_env = dict(os.environ, APP_DB=os.path.join(TMP, "uv.db"), CONVTREE_CONFIG=os.path.join(TMP, "uv.json"))
+_proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.main:app", "--port", str(_port), "--log-level", "warning"],
+                         cwd=ROOT, env=_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+try:
+    _cli = httpx.Client(base_url="http://127.0.0.1:%d" % _port, timeout=60, trust_env=False)
+    for _ in range(50):
+        try:
+            if _cli.get("/api/health").status_code == 200:
+                break
+        except Exception:
+            time.sleep(0.1)
+    _pid = _cli.post("/api/spaces", json={"name": "大文件"}).json()["id"]
+    big = ("瀑布模型要求在前期冻结需求，阶段评审通过后才进入下一阶段。敏捷开发以迭代交付。\n" * 125000).encode("utf-8")
+    lat, done = [], {}
+
+    def _upload():
+        t = time.time()
+        r = _cli.post("/api/sources", data={"project_id": _pid}, files={"file": ("big.txt", big, "text/plain")})
+        done["dt"], done["code"] = time.time() - t, r.status_code
+
+    th = threading.Thread(target=_upload)
+    th.start()
+    time.sleep(0.3)
+    while th.is_alive():
+        t = time.time()
+        _cli.get("/api/health")
+        lat.append(time.time() - t)
+        time.sleep(0.05)
+    th.join()
+    mx = max(lat) if lat else 0
+    check(done.get("code") == 200 and done.get("dt", 0) > 0.8,
+          "大文件入库成功且确实耗时（%.1fMB，%.2fs）" % (len(big) / 1e6, done.get("dt", 0)))
+    check(len(lat) >= 3 and mx < 0.5, "test_ingest_does_not_block_health：入库期间 /api/health 最大延迟 %.2fs（%d 次）" % (mx, len(lat)))
+finally:
+    _proc.terminate()
+    _proc.wait(timeout=10)
+
+
+# ════════════════════════════════════════════════════════════════════
 print("\n共 %d 例，失败 %d" % (N[0], len(FAILS)))
 for f in FAILS:
     print("  FAIL", f)
