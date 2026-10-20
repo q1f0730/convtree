@@ -118,6 +118,9 @@ def init_db():
             conn.execute("ALTER TABLE node ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
         if "project_id" not in cols:  # 老库迁移：会话归属项目
             conn.execute("ALTER TABLE node ADD COLUMN project_id TEXT")
+        mcols = [r[1] for r in conn.execute("PRAGMA table_info(message)")]
+        if "status" not in mcols:  # 迁移：失败回复标 status='error'，不进上下文（审计 P1-4）
+            conn.execute("ALTER TABLE message ADD COLUMN status TEXT NOT NULL DEFAULT 'ok'")
         ocols = [r[1] for r in conn.execute("PRAGMA table_info(overlay)")]
         if ocols and "value" not in ocols:  # 老库迁移：style 格式值
             conn.execute("ALTER TABLE overlay ADD COLUMN value TEXT")
@@ -178,16 +181,18 @@ def node_path(node_id):
     return list(reversed(out))
 
 
-def add_message(node_id, role, content):
+def add_message(node_id, role, content, status="ok"):
+    if status not in ("ok", "error"):
+        raise ValueError("status 非法")
     mid, ts = uid("msg"), now_ms()
     conn = connect()
     try:
-        conn.execute("INSERT INTO message(id,node_id,role,content,created_at) VALUES(?,?,?,?,?)",
-                     (mid, node_id, role, content, ts))
+        conn.execute("INSERT INTO message(id,node_id,role,content,created_at,status) VALUES(?,?,?,?,?,?)",
+                     (mid, node_id, role, content, ts, status))
         conn.commit()
     finally:
         conn.close()
-    return {"id": mid, "node_id": node_id, "role": role, "content": content}
+    return {"id": mid, "node_id": node_id, "role": role, "content": content, "status": status}
 
 
 def list_messages(node_id):
@@ -215,6 +220,7 @@ def rename_node(node_id, title):
 
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+_NODE_ID = re.compile(r"^nd_[0-9a-f]{12}$")
 _STYLE_KEYS = {"b", "i", "size", "font", "op"}
 
 
@@ -263,6 +269,10 @@ def add_overlay(node_id, message_id, kind, start, end, color, value=None, ref_no
                             (message_id, node_id)).fetchone()
         if not mrow:
             raise LookupError("消息不存在")
+        if ref_node is not None:
+            if not _NODE_ID.match(ref_node or "") or not conn.execute(
+                    "SELECT 1 FROM node WHERE id=? AND deleted=0", (ref_node,)).fetchone():
+                raise ValueError("refNode 非法")
         size = len(mrow["content"] or "")
         if (not isinstance(start, int) or not isinstance(end, int)
                 or isinstance(start, bool) or isinstance(end, bool)

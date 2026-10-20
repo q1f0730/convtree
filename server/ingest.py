@@ -132,21 +132,98 @@ def html_to_text(html):
     return re.sub(r"\s+", " ", p.title).strip(), normalize(text)
 
 
-def fetch_url(url):
-    """抓网页，返回 (content_type, bytes)。可被测试 monkeypatch。失败抛 ValueError。"""
-    import httpx
+URL_MAX_REDIRECTS = 5
+
+
+def _allowlisted(host, port):
+    """CONVTREE_URL_ALLOWLIST：逗号分隔的 host 或 host:port，允许即使解析到内网也抓（自担风险，如局域网资料站）。"""
+    from server import settings as app_settings
+    for item in app_settings.env("CONVTREE_URL_ALLOWLIST").split(","):
+        item = item.strip().lower()
+        if not item:
+            continue
+        if item == host or item == "%s:%d" % (host, port):
+            return True
+    return False
+
+
+def _ip_blocked(ip):
+    import ipaddress
+    ip = ipaddress.ip_address(ip)
+    if getattr(ip, "ipv4_mapped", None):
+        ip = ip.ipv4_mapped
+    return (not ip.is_global or ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
+def resolve_public(host, port):
+    """解析主机（含 0x7f000001 / 2130706433 / 127.1 等数字写法，由系统解析器统一处理），
+    任一地址落在回环/内网/链路本地/保留/元数据段即拒。返回用于连接的已校验 IP（钉住，防 DNS rebinding）。"""
+    import socket
+    host = (host or "").strip().lower().strip("[]")
+    if not host:
+        raise ValueError("URL 非法（无主机）")
     try:
-        with httpx.Client(timeout=URL_TIMEOUT, follow_redirects=True,
-                          headers={"User-Agent": "Mozilla/5.0 convtree/0.1"}) as cli:
-            r = cli.get(url)
-    except Exception as exc:
-        raise ValueError("URL 抓取失败：%s" % type(exc).__name__)
-    if r.status_code >= 400:
-        raise ValueError("URL 抓取失败：HTTP %d" % r.status_code)
-    body = r.content
-    if len(body) > URL_MAX_BYTES:
-        raise ValueError("网页过大（上限 5MB）")
-    return r.headers.get("content-type", ""), body
+        infos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+    except (socket.gaierror, UnicodeError, OSError):
+        raise ValueError("URL 抓取失败：域名解析失败")
+    ips = []
+    for info in infos:
+        ip = info[4][0].split("%", 1)[0]
+        if ip not in ips:
+            ips.append(ip)
+    if not ips:
+        raise ValueError("URL 抓取失败：域名解析失败")
+    if not _allowlisted(host, port) and any(_ip_blocked(ip) for ip in ips):
+        raise ValueError("拒绝抓取本机/内网地址（安全限制）")
+    return ips[0]
+
+
+def fetch_url(url):
+    """抓网页，返回 (content_type, bytes)。可被测试 monkeypatch。失败抛 ValueError。
+    安全（审计 P0-2 / P2-6）：手动跟随重定向、每一跳解析并校验 IP、连接钉住已校验 IP、边读边计数超限即断。"""
+    import httpx
+    from urllib.parse import urljoin, urlsplit, urlunsplit
+    cur = url
+    with httpx.Client(timeout=URL_TIMEOUT, follow_redirects=False, trust_env=False) as cli:
+        for _hop in range(URL_MAX_REDIRECTS + 1):
+            u = urlsplit(cur)
+            if u.scheme not in ("http", "https"):
+                raise ValueError("URL 非法（需 http/https）")
+            try:
+                port = u.port or (443 if u.scheme == "https" else 80)
+            except ValueError:
+                raise ValueError("URL 非法（端口）")
+            host = u.hostname or ""
+            ip = resolve_public(host, port)
+            ip_host = "[%s]" % ip if ":" in ip else ip
+            netloc = ip_host + ("" if u.port is None else ":%d" % port)
+            pinned = urlunsplit((u.scheme, netloc, u.path or "/", u.query, ""))
+            host_hdr = host if u.port is None else "%s:%d" % (host, port)
+            headers = {"User-Agent": "Mozilla/5.0 convtree/0.1", "Host": host_hdr}
+            ext = {"sni_hostname": host} if u.scheme == "https" else {}
+            try:
+                with cli.stream("GET", pinned, headers=headers, extensions=ext) as r:
+                    if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
+                        cur = urljoin(cur, r.headers["location"])
+                        continue
+                    if r.status_code >= 400:
+                        raise ValueError("URL 抓取失败：HTTP %d" % r.status_code)
+                    cl = r.headers.get("content-length")
+                    if cl and cl.isdigit() and int(cl) > URL_MAX_BYTES:
+                        raise ValueError("网页过大（上限 5MB）")
+                    buf, n = [], 0
+                    for chunk in r.iter_bytes():
+                        n += len(chunk)
+                        if n > URL_MAX_BYTES:
+                            raise ValueError("网页过大（上限 5MB）")
+                        buf.append(chunk)
+                    return r.headers.get("content-type", ""), b"".join(buf)
+            except ValueError:
+                raise
+            except Exception as exc:
+                raise ValueError("URL 抓取失败：%s" % type(exc).__name__)
+    raise ValueError("URL 抓取失败：重定向过多")
 
 
 def extract_url(url):

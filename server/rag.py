@@ -100,19 +100,9 @@ def chunk_text(text, size=None, overlap=None):
 # ── 嵌入后端（可选）──
 
 def embed_config():
-    """返回 (base, key, model) 或 None（未启用）。"""
+    """返回 (base, key, model) 或 None（未启用）。规则在 settings.embed_endpoint（ADR-0002）。"""
     from server import settings as app_settings
-    cfg = app_settings.load()
-    model = (cfg.get("embed_model") or os.environ.get("EMBED_MODEL") or "").strip()
-    if not model:
-        return None
-    base = (cfg.get("embed_base_url") or os.environ.get("EMBED_BASE_URL")
-            or cfg.get("base_url") or os.environ.get("LLM_BASE_URL") or "").rstrip("/")
-    key = cfg.get("embed_key") or os.environ.get("EMBED_API_KEY") or cfg.get("api_key") \
-        or os.environ.get("LLM_API_KEY") or ""
-    if not base:
-        return None
-    return base, key, model
+    return app_settings.embed_endpoint()
 
 
 def _embed(texts):

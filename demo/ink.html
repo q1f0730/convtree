@@ -367,10 +367,10 @@ u.uln{text-underline-offset:4px;text-decoration-thickness:1.5px}
 <div class="sheet">
 <h3>设置</h3><div class="note">模型接入 · 密钥只存本机</div>
 <h4>对话模型</h4>
-<div class="grid2"><div><label>服务商</label><select id="sProv"></select></div><div><label>模型</label><input id="sModel" placeholder="qwen-plus"></div></div>
+<div class="grid2"><div><label>服务商</label><select id="sProv"></select></div><div><label>模型</label><input id="sModel" placeholder="mercury-3"></div></div>
 <label>地址 BASE URL</label><input id="sBase" placeholder="https://…">
-<label>密钥 API KEY（留空=不改）</label><input id="sKey" type="password" placeholder="sk-…">
-<h4>嵌入检索（可选）</h4><div class="note">留空只用 BM25；地址与密钥留空时沿用上面的聊天端点。</div>
+<label>密钥 API KEY（留空=不改；改了地址的主机必须重填）</label><input id="sKey" type="password" placeholder="sk-…">
+<h4>嵌入检索（可选）</h4><div class="note">留空只用 BM25（Mercury 无嵌入接口）；嵌入地址与聊天同主机时才沿用聊天密钥。</div>
 <label>嵌入地址 EMBED BASE URL</label><input id="sEmbBase" placeholder="留空 = 沿用聊天地址">
 <div class="grid2"><div><label>嵌入模型</label><input id="sEmbModel" placeholder="如 text-embedding-v3"></div><div><label>嵌入密钥（留空=不改）</label><input id="sEmbKey" type="password" placeholder="留空 = 沿用聊天密钥"></div></div>
 <div class="row"><button id="sSave" class="pri">保存</button><button id="sTest">测试连接</button><button id="sClose">关闭</button></div>
@@ -649,6 +649,7 @@ function mdcite(h,cites){if(!cites||!cites.length)return h;const ok=new Set(cite
  return h.replace(/\[(\d+)\]/g,(m,n)=>ok.has(n)?'<span class="cite" data-n="'+n+'">['+n+']</span>':m)}
 function inline(s){return s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code style="background:#EEF2F8;border-radius:4px;padding:0 4px">$1</code>')}
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function escAttr(s){return escH(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function mdSeg(s){s=String(s);const atoms=[];
  const P=(pre,t,s0,post)=>{atoms.push({pre:pre||'',t:t||'',s0:(s0==null?-1:s0),post:post||''})};
  const inlineSeg=(chunk,base)=>{const ps=[];let re=/\*\*([^*]+)\*\*/g,last=0,m;
@@ -698,8 +699,8 @@ function atomsHtml(atoms,ovs){ovs=(ovs||[]).filter(o=>o&&o.end>o.start&&(o.kind=
     const ops=sty.map(o=>o.val&&o.val.op).filter(v=>typeof v==='number');
     if(ops.length)css+='opacity:'+(Math.min.apply(null,ops)/100)+';';
     if(css)pt='<span style="'+css+'">'+pt+'</span>'}
-   ovs.forEach(o=>{if(o.kind==='ul'&&ins(o))pt='<u class="uln" style="text-decoration-color:'+o.color+'">'+pt+'</u>'});
-   ovs.forEach(o=>{if(o.kind==='mark'&&ins(o))pt='<mark class="hl" style="--mk:'+o.color+'55"'+(o.ref_node?' data-ref="'+o.ref_node+'"':'')+'>'+pt+'</mark>'});
+   ovs.forEach(o=>{if(o.kind==='ul'&&ins(o))pt='<u class="uln" style="text-decoration-color:'+escAttr(o.color)+'">'+pt+'</u>'});
+   ovs.forEach(o=>{if(o.kind==='mark'&&ins(o))pt='<mark class="hl" style="--mk:'+escAttr(o.color)+'55"'+(o.ref_node?' data-ref="'+escAttr(o.ref_node)+'"':'')+'>'+pt+'</mark>'});
    h+=pt}
   return h+a.post}).join('')}
 function mdOv(text,ovs,cites){ovs=(ovs||[]).filter(o=>o&&o.end>o.start);if(!ovs.length)return mdcite(md(text),cites);return mdcite(atomsHtml(mdSeg(text),ovs),cites)}
@@ -1085,16 +1086,19 @@ document.getElementById('sTest').onclick=async()=>{
  document.getElementById('drawMsg').textContent='测试中…';
  try{const r=await fetch('/api/settings/test',{method:'POST'});const d=await r.json();
   document.getElementById('drawMsg').textContent=(d.ok?'✓ ':'✗ ')+d.message}catch(e){document.getElementById('drawMsg').textContent='失败：'+e.message}};
+let PROVIDERS={},PROV0='inception';
 function fillSettings(c){c=c||{};const v=(id,x)=>{document.getElementById(id).value=x||''};
  v('sBase',c.base_url);v('sModel',c.model);v('sEmbBase',c.embed_base_url);v('sEmbModel',c.embed_model);
- document.getElementById('sKey').placeholder=c.key_masked||'sk-…';
+ document.getElementById('sKey').placeholder=c.key_masked||'sk-…';document.getElementById('sKey').dataset.masked=c.key_masked||'';PROV0=c.provider||PROV0;
  document.getElementById('sEmbKey').placeholder=c.embed_key_masked||'留空 = 沿用聊天密钥'}
 (async function boot(){
  loadProjects();
  try{const s=await (await fetch('/api/settings')).json();
   const sel=document.getElementById('sProv');sel.innerHTML='';
   Object.entries(s.providers||{}).forEach(([id,p])=>{const o=document.createElement('option');o.value=id;o.textContent=p.name;sel.appendChild(o)});
-  sel.value=s.config.provider||'dashscope';
+  sel.value=s.config.provider||'inception';PROVIDERS=s.providers||{};PROV0=sel.value;
+  sel.onchange=()=>{const p=PROVIDERS[sel.value]||{};document.getElementById('sBase').value=p.base_url||'';document.getElementById('sModel').value=p.default_model||'';
+   const k=document.getElementById('sKey');k.value='';k.placeholder=sel.value===PROV0?(k.dataset.masked||'sk-…'):(p.need_key?'换服务商需重新填密钥':'该服务商无需密钥')};
   fillSettings(s.config);
   if(!s.config.configured)toast('未配模型：点侧栏设置（不配也能聊，走mock）')}catch(_){toast('连不上后端，确认服务已启动')}
  try{const v=await (await fetch('/api/version')).json();const b=v.build||'dev';document.getElementById('buildTag').textContent='构建 '+b;console.log('[convtree] build '+b)}catch(_){}

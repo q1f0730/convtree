@@ -42,8 +42,34 @@ app.add_middleware(CORSMiddleware,
                    allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 
 
+_DEFAULT_HOSTS = ("localhost", "127.0.0.1", "::1", "testserver")
+
+
+def host_allowed(host_header):
+    """Host 头白名单（防 DNS rebinding，ADR-0002）。默认本机；CONVTREE_ALLOWED_HOSTS 追加，
+    逗号分隔，支持 *.example.com 通配，单独一个 * 表示关闭校验。"""
+    h = (host_header or "").strip().lower()
+    if h.startswith("["):
+        h = h[1:h.find("]")] if "]" in h else h[1:]
+    elif h.count(":") == 1:
+        h = h.split(":", 1)[0]
+    if not h:
+        return False
+    extra = [x.strip().lower() for x in app_settings.env("CONVTREE_ALLOWED_HOSTS").split(",") if x.strip()]
+    for a in list(_DEFAULT_HOSTS) + extra:
+        a = a.split("://", 1)[-1].rstrip("/")
+        if a.count(":") == 1:
+            a = a.split(":", 1)[0]
+        if a == "*" or a == h or (a.startswith("*.") and h.endswith(a[1:]) and len(h) > len(a) - 1):
+            return True
+    return False
+
+
 @app.middleware("http")
 async def _no_store(request, call_next):
+    if not host_allowed(request.headers.get("host")):
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("Host 不在允许列表（设置 CONVTREE_ALLOWED_HOSTS）", status_code=400)
     resp = await call_next(request)
     p = request.url.path
     if p == "/" or p.startswith("/demo") or p.startswith("/api"):
@@ -74,6 +100,8 @@ def build_context(node_id, query=None, with_cites=False):
     path = store.node_path(node_id)
     for n in path:
         for m in store.list_messages(n["id"]):
+            if m.get("status") == "error":  # 失败记录只给人看，不喂模型（审计 P1-4）
+                continue
             out.append({"role": m["role"], "content": m["content"]})
     if query and path:
         try:
@@ -477,7 +505,12 @@ async def chat(body: ChatIn):
                 full += chunk
                 await q.put(("delta", chunk))
             if not full.strip():
-                full = "（生成失败：模型返回了空内容）"
+                err = "（生成失败：模型返回了空内容）"
+                mid = store.add_message(node_id, "assistant", err, status="error")
+                await q.put(("delta", err))
+                await q.put(("done", {"nodeId": node_id, "messageId": mid["id"], "error": True}))
+                await q.put(None)
+                return
             mid = store.add_message(node_id, "assistant", full)
             save_cites(mid["id"])
             await q.put(("done", {"nodeId": node_id, "messageId": mid["id"], "cites": len(cites)}))
@@ -491,7 +524,7 @@ async def chat(body: ChatIn):
             raise
         except Exception as exc:
             err = "（生成失败：%s）" % exc
-            mid = store.add_message(node_id, "assistant", err)
+            mid = store.add_message(node_id, "assistant", err, status="error")
             await q.put(("delta", err))
             await q.put(("done", {"nodeId": node_id, "messageId": mid["id"], "error": True}))
         await q.put(None)
