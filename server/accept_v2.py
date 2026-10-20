@@ -429,6 +429,57 @@ check(client.delete("/api/projects/prj_nope").status_code == 404, "旧别名删�
 
 
 # ════════════════════════════════════════════════════════════════════
+section("04 分支上下文预算（审计 P1-3）")
+os.environ["CONTEXT_BUDGET_CHARS"] = "24000"
+SPB = client.post("/api/spaces", json={"name": "深挖预算"}).json()["id"]
+r = client.post("/api/chat", json={"text": "根问题：什么是软件过程模型？", "spaceId": SPB})
+root_b = [d for e, d in sse_events(r.text) if e == "done"][0]["nodeId"]
+cur_b, anchors = root_b, []
+# 夹具：直接写库造 3 层 × 10 轮 × ~2k 字（观察仍走 HTTP：看上游实际收到的请求体）
+for depth in range(3):
+    for i in range(10):
+        store.add_message(cur_b, "user", ("第%d层第%d问" % (depth, i)) + "问" * 50)
+        store.add_message(cur_b, "assistant", ("第%d层第%d答" % (depth, i)) + "答" * 2000)
+    anchor = "锚文本ANCHOR_%d_深层" % depth
+    anchors.append(anchor)
+    cur_b = client.post("/api/branch", json={"parentId": cur_b, "anchorText": anchor}).json()["node"]["id"]
+client.post("/api/settings", json={"provider": "custom", "baseUrl": UPBASE, "apiKey": "sk-x-123456789"})
+Upstream.GOT.clear()
+t0 = time.time()
+client.post("/api/chat", json={"nodeId": cur_b, "text": "第4层的新问题：为什么要冻结需求？"})
+sent = json.loads([g["body"] for g in Upstream.GOT if "/chat/completions" in g["path"]][-1])["messages"]
+total = sum(len(m["content"]) for m in sent)
+flat = "\n".join(m["content"] for m in sent)
+check(total <= 24000 + 3000, "test_deep_branch_context_under_budget（深度4：%d 字，预算 24000，未压缩约 61800）" % total)
+check(anchors[-1] in flat, "test_context_keeps_current_anchor_verbatim：当前分支锚文本原文在")
+check("第4层的新问题：为什么要冻结需求？" in flat, "当前问题原文在")
+check(("第2层第9答" + "答" * 2000) in flat, "最近祖先在预算内保持原文")
+check("祖先摘要" in flat and "第0层第0问" in flat, "远祖先被摘要替换（摘要保留根问题开头）")
+check(("第0层第5答" + "答" * 2000) not in flat, "远祖先原文不再整段进入")
+check(time.time() - t0 < 5, "确定性摘要不额外调模型（%.2fs）" % (time.time() - t0))
+calls_before = len([g for g in Upstream.GOT if "/chat/completions" in g["path"]])
+check(calls_before == 1, "mock/截断摘要：一次提问只调一次上游")
+root_msgs = client.get("/api/nodes/%s/messages" % root_b).json()["messages"]
+check(any(m["content"] == "第0层第0答" + "答" * 2000 for m in root_msgs), "D-101：摘要不改原消息")
+Upstream.GOT.clear()
+client.post("/api/chat", json={"nodeId": cur_b, "text": "再追问一次"})
+sent2 = json.loads([g["body"] for g in Upstream.GOT if "/chat/completions" in g["path"]][-1])["messages"]
+check(sum(len(m["content"]) for m in sent2) <= 24000 + 3000 and anchors[-1] in "\n".join(m["content"] for m in sent2),
+      "第二问仍在预算内（摘要缓存复用）")
+# 浅分支不受影响：预算内一字不压
+r = client.post("/api/chat", json={"text": "浅根", "spaceId": SPB})
+sroot = [d for e, d in sse_events(r.text) if e == "done"][0]["nodeId"]
+sb = client.post("/api/branch", json={"parentId": sroot, "anchorText": "浅根"}).json()["node"]["id"]
+Upstream.GOT.clear()
+client.post("/api/chat", json={"nodeId": sb, "text": "浅问"})
+sent3 = json.loads([g["body"] for g in Upstream.GOT if "/chat/completions" in g["path"]][-1])["messages"]
+check(not any("祖先摘要" in m["content"] for m in sent3) and any(m["content"] == "浅根" for m in sent3),
+      "浅分支预算内保持全文、不出摘要")
+os.environ.pop("CONTEXT_BUDGET_CHARS")
+reset_settings()
+
+
+# ════════════════════════════════════════════════════════════════════
 print("\n共 %d 例，失败 %d" % (N[0], len(FAILS)))
 for f in FAILS:
     print("  FAIL", f)

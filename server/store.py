@@ -95,6 +95,12 @@ CREATE TABLE IF NOT EXISTS citation (
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_cite_msg ON citation(message_id);
+CREATE TABLE IF NOT EXISTS node_summary (
+  node_id    TEXT PRIMARY KEY REFERENCES node(id),
+  msg_count  INTEGER NOT NULL,
+  summary    TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
 """
 
 
@@ -718,3 +724,25 @@ def list_citations(node_id):
         d = dict(r)
         out.setdefault(d.pop("message_id"), []).append(d)
     return out
+
+
+# ── 祖先摘要缓存（ADR-0004；外挂表，不改 message）──
+
+def get_node_summary(node_id, msg_count):
+    conn = connect()
+    try:
+        r = conn.execute("SELECT summary FROM node_summary WHERE node_id=? AND msg_count=?",
+                         (node_id, msg_count)).fetchone()
+        return r[0] if r else None
+    finally:
+        conn.close()
+
+
+def put_node_summary(node_id, msg_count, summary):
+    conn = connect()
+    try:
+        conn.execute("INSERT OR REPLACE INTO node_summary(node_id,msg_count,summary,created_at) VALUES(?,?,?,?)",
+                     (node_id, msg_count, summary, now_ms()))
+        conn.commit()
+    finally:
+        conn.close()

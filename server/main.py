@@ -96,13 +96,10 @@ def build_context(node_id, query=None, with_cites=False):
     """D-107：上下文 = path(root→self) 上消息；兄弟/子excluded（path 天然不含）。
     有 query 且根节点（path[0]）挂了笔记本时，检索结果前置为带 [n] 编号的 system 消息；
     分支子节点经 path[0] 继承根的笔记本。with_cites=True 时返回 (messages, cites)。"""
-    out, cites = [], []
+    from server import context as ctx_mod
+    cites = []
     path = store.node_path(node_id)
-    for n in path:
-        for m in store.list_messages(n["id"]):
-            if m.get("status") == "error":  # 失败记录只给人看，不喂模型（审计 P1-4）
-                continue
-            out.append({"role": m["role"], "content": m["content"]})
+    out = ctx_mod.assemble(path)  # ADR-0004：预算内原文，超出的远祖先换缓存摘要
     if query and path:
         try:
             from server import rag
